@@ -45,8 +45,8 @@ Primero es para uso personal. Se construye pensando en que más adelante la usen
 - Sugerir qué prenda conviene comprar para sumar combinaciones.
 
 ## Próximos pasos
-1. [ ] Base de la app: estructura, diseño y armario guardado en el navegador (sin cuentas todavía).
-2. [ ] Carga de prendas con etiquetas manuales y motor de outfits por reglas.
+1. [x] Base de la app: estructura, diseño y armario guardado en el navegador (sin cuentas todavía).
+2. [x] Carga de prendas con etiquetas manuales y motor de outfits por reglas.
 3. [ ] Conectar Supabase (cuentas y fotos en la nube).
 4. [ ] Conectar la IA gratis (Gemini) para clasificar fotos y analizar el perfil.
 5. [ ] Publicar en Vercel e instalarla en el celular.
