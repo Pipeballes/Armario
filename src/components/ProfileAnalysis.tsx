@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { BODY_TYPES, SKIN_DEPTHS, UNDERTONES } from "@/lib/catalog";
+import { BODY_TYPES, PALETTE_BY_UNDERTONE, SKIN_DEPTHS, UNDERTONES, colorById, type Undertone } from "@/lib/catalog";
+import { Swatch } from "./ui";
 import { AiUnavailable, analyzeProfile } from "@/lib/ai";
 import type { ProfileAnalysis as Analysis } from "@/lib/ai-schema";
 import { resizePhoto } from "@/lib/image";
@@ -191,7 +192,12 @@ export default function ProfileAnalysis() {
           <p>
             <strong>Silueta:</strong> {label(BODY_TYPES, result.bodyType)}
           </p>
+          {result.undertone && <Palette undertone={result.undertone} />}
           {result.advice && <p className="rounded-xl bg-accent-soft p-3">💡 {result.advice}</p>}
+          <p className="text-xs text-muted">
+            Si tocás &quot;Usar estos datos&quot;, reemplazan a los que tenés ahora. Si tocás &quot;Descartar&quot;, queda
+            todo como estaba.
+          </p>
           <div className="flex gap-2 pt-1">
             <button className="btn-primary flex-1" onClick={() => apply(result)}>
               Usar estos datos
@@ -204,9 +210,39 @@ export default function ProfileAnalysis() {
       )}
 
       {msg && <p className="mt-2 text-sm">{msg}</p>}
-      {profile.aiAdvice && !result && (
-        <p className="mt-3 rounded-xl bg-surface-2 p-3 text-sm">💡 {profile.aiAdvice}</p>
+      {!result && (profile.undertone || profile.aiAdvice) && (
+        <div className="mt-4 space-y-2 rounded-xl bg-surface-2 p-3 text-sm">
+          <p className="font-semibold">Tu perfil ahora</p>
+          {(profile.undertone || profile.skinDepth || profile.bodyType) && (
+            <p className="text-muted">
+              Subtono {label(UNDERTONES, profile.undertone).toLowerCase()} · piel{" "}
+              {label(SKIN_DEPTHS, profile.skinDepth).toLowerCase()} · silueta{" "}
+              {label(BODY_TYPES, profile.bodyType).toLowerCase()}
+            </p>
+          )}
+          {profile.undertone && <Palette undertone={profile.undertone} />}
+          {profile.aiAdvice && <p>💡 {profile.aiAdvice}</p>}
+          <p className="text-xs text-muted">
+            Las fotos no se guardan. Si analizás fotos nuevas, te muestro el resultado y vos elegís si reemplaza a este.
+          </p>
+        </div>
       )}
     </section>
+  );
+}
+
+/** Colores que más favorecen cerca de la cara según el subtono. */
+function Palette({ undertone }: { undertone: Undertone }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-xs font-semibold tracking-wide text-muted uppercase">🎨 Tus colores</p>
+      <div className="flex flex-wrap gap-1.5">
+        {PALETTE_BY_UNDERTONE[undertone].map((id) => (
+          <span key={id} className="chip px-2.5 py-1 text-xs">
+            <Swatch colorId={id} size={14} /> {colorById(id).label}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
