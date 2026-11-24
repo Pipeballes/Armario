@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { colorHarmony, suggestOutfits } from "./outfits";
+import { colorHarmony, outfitKey, suggestOutfits } from "./outfits";
 import { EMPTY_PROFILE, type Garment } from "./types";
 
 let n = 0;
@@ -101,5 +101,30 @@ describe("suggestOutfits", () => {
     });
     expect(res.outfits[0].reasons.join(" ")).toContain("tono de piel cálido");
     expect(res.tip).toContain("claros");
+  });
+});
+
+describe("feedback 👍 / 👎", () => {
+  const ropa = [
+    g({ category: "top", color: "blanco" }),
+    g({ category: "top", color: "azul-marino" }),
+    g({ category: "bottom", color: "denim" }),
+    g({ category: "bottom", color: "beige" }),
+    g({ category: "shoes", color: "blanco" }),
+  ];
+  const req = { occasion: "casual" as const, weather: "templado" as const, profile: EMPTY_PROFILE };
+
+  it("un outfit con 👎 no se vuelve a sugerir", () => {
+    const first = suggestOutfits(ropa, req).outfits[0];
+    const res = suggestOutfits(ropa, { ...req, feedback: { liked: [], disliked: [outfitKey(first.items)] } });
+    expect(res.outfits.map((o) => outfitKey(o.items))).not.toContain(outfitKey(first.items));
+  });
+
+  it("un outfit con 👍 pasa primero", () => {
+    const all = suggestOutfits(ropa, { ...req, count: 4 }).outfits;
+    const last = all[all.length - 1];
+    const res = suggestOutfits(ropa, { ...req, feedback: { liked: [outfitKey(last.items)], disliked: [] } });
+    expect(outfitKey(res.outfits[0].items)).toBe(outfitKey(last.items));
+    expect(res.outfits[0].reasons[0]).toContain("te gustó");
   });
 });

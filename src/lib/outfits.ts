@@ -18,6 +18,29 @@ export interface Outfit {
   reasons: string[];
 }
 
+export interface Feedback {
+  /** Claves de outfits (ids de prendas ordenados y unidos con "+") que te gustaron. */
+  liked: string[];
+  disliked: string[];
+}
+
+/** Clave de un outfit: los ids de sus prendas, ordenados. */
+export function outfitKey(items: { id: string }[]): string {
+  return items
+    .map((i) => i.id)
+    .sort()
+    .join("+");
+}
+
+/** Cuánto gusta cada prenda según los 👍 / 👎 de los outfits donde aparece. */
+function itemAffinity(fb: Feedback | undefined): Map<string, number> {
+  const m = new Map<string, number>();
+  if (!fb) return m;
+  for (const k of fb.liked) for (const id of k.split("+")) m.set(id, (m.get(id) ?? 0) + 1);
+  for (const k of fb.disliked) for (const id of k.split("+")) m.set(id, (m.get(id) ?? 0) - 1);
+  return m;
+}
+
 export interface OutfitRequest {
   occasion: OccasionId;
   weather: Weather;
@@ -27,6 +50,10 @@ export interface OutfitRequest {
   /** Fuente de azar para variar resultados ("Otras opciones"). Por defecto no varía. */
   random?: () => number;
   now?: number;
+  /** Prendas que ya se usan en otro día del plan: mejor no repetirlas. */
+  avoidIds?: string[];
+  /** Lo que marcaste con 👍 / 👎. */
+  feedback?: Feedback;
 }
 
 export interface OutfitResult {
@@ -150,6 +177,21 @@ function scoreOutfit(items: Garment[], req: OutfitRequest): Outfit {
   const recent = items.filter((i) => i.lastWorn && now - i.lastWorn < 2 * DAY).length;
   score -= recent * 1.2;
 
+  // Que no se repita ropa entre días del plan.
+  // Pesa más que un 👍 para que el plan de la semana no repita el outfit favorito todos los días.
+  if (req.avoidIds?.length) score -= items.filter((i) => req.avoidIds!.includes(i.id)).length * 4;
+
+  // Lo que te gustó y lo que no.
+  if (req.feedback) {
+    const key = outfitKey(items);
+    if (req.feedback.liked.includes(key)) {
+      score += 3;
+      reasons.unshift("Este outfit te gustó antes 👍");
+    }
+    const aff = itemAffinity(req.feedback);
+    score += items.reduce((n, i) => n + Math.max(-2, Math.min(2, aff.get(i.id) ?? 0)) * 0.4, 0);
+  }
+
   if (req.random) score += req.random() * 2.5;
 
   return { items, score, reasons };
@@ -206,7 +248,13 @@ export function suggestOutfits(garments: Garment[], req: OutfitRequest): OutfitR
     }
   }
 
+  const disliked = new Set(req.feedback?.disliked ?? []);
   candidates.sort((a, b) => b.score - a.score);
+  if (disliked.size) {
+    const kept = candidates.filter((c) => !disliked.has(outfitKey(c.items)));
+    candidates.length = 0;
+    candidates.push(...kept);
+  }
 
   // Elegir variados: que no repitan la misma base.
   const chosen: Outfit[] = [];

@@ -7,10 +7,11 @@ import { actions, useArmario } from "@/lib/store";
 import type { Garment } from "@/lib/types";
 import GarmentForm from "@/components/GarmentForm";
 import GarmentPhoto from "@/components/GarmentPhoto";
+import ShoppingCard from "@/components/ShoppingCard";
 import { Chip, ErrorBox, Loading, Swatch } from "@/components/ui";
 
 export default function ArmarioPage() {
-  const { ready, garments, error } = useArmario();
+  const { ready, garments, profile, error } = useArmario();
   const [category, setCategory] = useState<Category | "all">("all");
   const [color, setColor] = useState<string | null>(null);
   const [editing, setEditing] = useState<Garment | null>(null);
@@ -106,6 +107,7 @@ export default function ArmarioPage() {
             ))}
           </ul>
           {shown.length === 0 && <p className="py-8 text-center text-muted">No hay prendas con ese filtro.</p>}
+          <ShoppingCard garments={garments} profile={profile} />
         </>
       )}
     </div>

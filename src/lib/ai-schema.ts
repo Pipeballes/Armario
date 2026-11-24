@@ -113,3 +113,66 @@ export function parseProfile(raw: unknown): ProfileAnalysis | null {
     advice: typeof r.advice === "string" ? r.advice.trim().slice(0, 600) : "",
   };
 }
+
+// ---------- Elegir el mejor outfit ----------
+
+export interface ChooseRequest {
+  occasion: string;
+  weather: string;
+  event?: string;
+  profile: { undertone?: string | null; bodyType?: string | null; styles?: string[] };
+  options: { id: string; items: { name: string; category: string; color: string; formality: number; pattern: string }[] }[];
+}
+
+export interface ChoiceResult {
+  /** Ids de las opciones, de la mejor a la peor. */
+  order: string[];
+  /** Por qué la primera es la mejor (2-3 frases). */
+  why: string;
+  /** Un consejo para completar el look (accesorio, cómo usar la prenda). */
+  tip: string;
+}
+
+export const CHOOSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    order: { type: "ARRAY", items: { type: "STRING" } },
+    why: { type: "STRING" },
+    tip: { type: "STRING" },
+  },
+  required: ["order", "why", "tip"],
+};
+
+export function choosePrompt(c: ChooseRequest): string {
+  const opts = c.options
+    .map(
+      (o) =>
+        `- Opción ${o.id}: ` +
+        o.items.map((i) => `${i.name} (${i.category}, color ${i.color}, formalidad ${i.formality}/5${i.pattern === "estampado" ? ", estampada" : ""})`).join("; "),
+    )
+    .join("\n");
+  return `Sos un asesor de moda con buen gusto y hablás en español rioplatense, de forma simple y amable.
+Ocasión: ${c.occasion}${c.event ? ` (evento: "${c.event}")` : ""}. Clima: ${c.weather}.
+Persona: subtono de piel ${c.profile.undertone ?? "sin dato"}, silueta ${c.profile.bodyType ?? "sin dato"}, estilos que le gustan: ${c.profile.styles?.join(", ") || "sin dato"}.
+Opciones (todas con ropa que la persona ya tiene):
+${opts}
+
+Ordená las opciones de la mejor a la peor para esta ocasión y esta persona (order, con los ids tal cual).
+En "why" explicá en 2 o 3 frases cortas por qué la primera es la mejor (colores, ocasión, silueta).
+En "tip" dá un consejo concreto para completar el look (cómo llevarla, qué accesorio sumar). Nunca critiques el cuerpo.`;
+}
+
+export function parseChoice(raw: unknown, ids: string[]): ChoiceResult | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const order = Array.isArray(r.order) ? r.order.map(String).filter((x) => ids.includes(x)) : [];
+  const unique = [...new Set(order)];
+  if (unique.length === 0) return null;
+  // Las que la IA no nombró van al final, en el orden original.
+  for (const id of ids) if (!unique.includes(id)) unique.push(id);
+  return {
+    order: unique,
+    why: typeof r.why === "string" ? r.why.trim().slice(0, 500) : "",
+    tip: typeof r.tip === "string" ? r.tip.trim().slice(0, 300) : "",
+  };
+}

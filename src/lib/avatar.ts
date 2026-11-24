@@ -140,7 +140,13 @@ export function cameraFor(view: View, scale: number): { position: [number, numbe
 /** Outfit que manda la pantalla "¿Qué me pongo?" al probador con el botón "Probar en 3D". */
 export const PROBAR_KEY = "armario-probar";
 
-export const DEFAULT_AVATAR: AvatarStyle = { hair: "corto", hairColor: "#3b2a20", beard: false };
+export const DEFAULT_AVATAR: AvatarStyle = {
+  hair: "corto",
+  hairColor: "#3b2a20",
+  beard: false,
+  glasses: "ninguno",
+  expression: "sonrisa",
+};
 
 export const HAIRS: { id: AvatarStyle["hair"]; label: string }[] = [
   { id: "corto", label: "Corto" },
@@ -148,6 +154,22 @@ export const HAIRS: { id: AvatarStyle["hair"]; label: string }[] = [
   { id: "rapado", label: "Rapado" },
   { id: "rulos", label: "Rulos" },
   { id: "recogido", label: "Recogido" },
+  { id: "ondas", label: "Ondas" },
+  { id: "cresta", label: "Cresta" },
+];
+
+export const GLASSES: { id: NonNullable<AvatarStyle["glasses"]>; label: string }[] = [
+  { id: "ninguno", label: "Sin anteojos" },
+  { id: "redondos", label: "Redondos" },
+  { id: "cuadrados", label: "Cuadrados" },
+  { id: "sol", label: "De sol" },
+];
+
+export const EXPRESSIONS: { id: NonNullable<AvatarStyle["expression"]>; label: string }[] = [
+  { id: "sonrisa", label: "🙂 Sonrisa" },
+  { id: "feliz", label: "😄 Feliz" },
+  { id: "serio", label: "😐 Serio" },
+  { id: "guino", label: "😉 Guiño" },
 ];
 
 export const HAIR_COLORS: { hex: string; label: string }[] = [

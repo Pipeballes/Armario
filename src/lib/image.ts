@@ -115,3 +115,88 @@ export function guessColor(canvas: HTMLCanvasElement): string {
   const top = [...buckets.values()].sort((a, b) => b.count - a.count)[0];
   return nearestColorId(top.sum.map((v) => v / top.count) as RGB);
 }
+
+/** Una sombra es el mismo color del fondo pero más oscuro (todos los canales bajan parecido). */
+function isShadow(p: RGB, bg: RGB): boolean {
+  const lp = p[0] + p[1] + p[2];
+  const lb = bg[0] + bg[1] + bg[2] || 1;
+  const k = lp / lb;
+  if (k < 0.4 || k > 1) return false;
+  return Math.abs(p[0] - bg[0] * k) < 14 && Math.abs(p[1] - bg[1] * k) < 14 && Math.abs(p[2] - bg[2] * k) < 14;
+}
+
+/** Color del fondo limpio que se pone detrás de la prenda. */
+export const CLEAN_BG: RGB = [244, 241, 236];
+
+/**
+ * Quita el fondo liso: lo "pinta" desde los bordes hacia adentro mientras el color se parezca
+ * al del borde, y lo reemplaza por un fondo claro parejo. Devuelve null si el fondo no es liso
+ * (se sacó muy poco o casi todo), para no arruinar la foto.
+ */
+export function cleanBackground(canvas: HTMLCanvasElement): string | null {
+  const w = canvas.width;
+  const h = canvas.height;
+  const ctx = canvas.getContext("2d")!;
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  const at = (i: number): RGB => [d[i * 4], d[i * 4 + 1], d[i * 4 + 2]];
+
+  // Color del fondo = promedio del borde.
+  const border: number[] = [];
+  for (let x = 0; x < w; x++) border.push(x, (h - 1) * w + x);
+  for (let y = 0; y < h; y++) border.push(y * w, y * w + w - 1);
+  const bg = border
+    .reduce<RGB>((acc, i) => { const p = at(i); return [acc[0] + p[0], acc[1] + p[1], acc[2] + p[2]]; }, [0, 0, 0])
+    .map((v) => v / border.length) as RGB;
+  // Si el borde es muy variado, no es un fondo liso.
+  const spread = border.reduce((n, i) => n + distance(at(i), bg), 0) / border.length;
+  if (spread > 55) return null;
+
+  const tol = Math.max(45, spread * 2.2);
+  const isBg = new Uint8Array(w * h);
+  const queue = new Int32Array(w * h);
+  let head = 0;
+  let tail = 0;
+  for (const i of border) {
+    if (!isBg[i] && distance(at(i), bg) < tol) {
+      isBg[i] = 1;
+      queue[tail++] = i;
+    }
+  }
+  while (head < tail) {
+    const i = queue[head++];
+    const x = i % w;
+    const y = (i - x) / w;
+    const neighbors = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1];
+    for (const j of neighbors) {
+      if (j < 0 || isBg[j]) continue;
+      // Se compara con el fondo y con el vecino, así sigue sombras suaves sin "comerse" la prenda.
+      const pj = at(j);
+      if ((distance(pj, bg) < tol || isShadow(pj, bg)) && distance(pj, at(i)) < 28) {
+        isBg[j] = 1;
+        queue[tail++] = j;
+      }
+    }
+  }
+  const ratio = tail / (w * h);
+  if (ratio < 0.05 || ratio > 0.92) return null;
+
+  // Pintar el fondo, suavizando el borde de la prenda.
+  for (let i = 0; i < w * h; i++) {
+    if (isBg[i]) {
+      d[i * 4] = CLEAN_BG[0];
+      d[i * 4 + 1] = CLEAN_BG[1];
+      d[i * 4 + 2] = CLEAN_BG[2];
+    } else {
+      const x = i % w;
+      const edge =
+        (x > 0 && isBg[i - 1]) || (x < w - 1 && isBg[i + 1]) || (i >= w && isBg[i - w]) || (i < w * (h - 1) && isBg[i + w]);
+      if (edge) for (let c = 0; c < 3; c++) d[i * 4 + c] = Math.round((d[i * 4 + c] + CLEAN_BG[c]) / 2);
+    }
+  }
+  const out = document.createElement("canvas");
+  out.width = w;
+  out.height = h;
+  out.getContext("2d")!.putImageData(img, 0, 0);
+  return out.toDataURL("image/jpeg", 0.85);
+}

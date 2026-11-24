@@ -16,6 +16,8 @@ import {
   PROBAR_KEY,
   HAIRS,
   HAIR_COLORS,
+  GLASSES,
+  EXPRESSIONS,
   avatarOf,
 } from "@/lib/avatar";
 import { suggestOutfits } from "@/lib/outfits";
@@ -172,6 +174,26 @@ export default function ProbadorPage() {
                 <button type="button" className="chip" aria-pressed={style.beard} onClick={() => setStyle({ beard: true })}>
                   Con barba
                 </button>
+              </div>
+            </div>
+            <div>
+              <span className="label">Anteojos</span>
+              <div className="flex flex-wrap gap-2">
+                {GLASSES.map((g) => (
+                  <button key={g.id} type="button" className="chip" aria-pressed={(style.glasses ?? "ninguno") === g.id} onClick={() => setStyle({ glasses: g.id })}>
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="label">Expresión</span>
+              <div className="flex flex-wrap gap-2">
+                {EXPRESSIONS.map((e) => (
+                  <button key={e.id} type="button" className="chip" aria-pressed={(style.expression ?? "sonrisa") === e.id} onClick={() => { setStyle({ expression: e.id }); setView("cara"); }}>
+                    {e.label}
+                  </button>
+                ))}
               </div>
             </div>
             <p className="text-xs text-muted">La altura, la silueta y el tono de piel salen de tu Perfil.</p>

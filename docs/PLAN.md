@@ -38,11 +38,15 @@ Primero es para uso personal. Se construye pensando en que más adelante la usen
 - Elegir la ocasión: trabajo, cita, casual, salida de noche, evento formal, deporte.
 - La app arma de 2 a 3 outfits **con la ropa propia** y explica por qué combinan y por qué te quedan bien.
 
-### Etapa 4: Planificador y mejoras
-- Planificar el día o la semana (qué ropa tener lavada y lista).
-- Tener en cuenta el clima.
-- Marcar "me gustó" o "no me gustó" para que aprenda.
-- Sugerir qué prenda conviene comprar para sumar combinaciones.
+### Etapa 4: Planificador y mejoras ✅
+- [x] Planificar la semana: un outfit por día según agenda y clima, sin repetir, con días fijados y la lista de ropa para tener lista.
+- [x] Tener en cuenta el clima (automático).
+- [x] Marcar 👍 / 👎 para que aprenda.
+- [x] Sugerir qué prenda conviene comprar para sumar combinaciones.
+- [x] Que la IA elija el mejor outfit y explique por qué.
+- [x] Fondo limpio en las fotos de ropa.
+- [x] Avatar con anteojos, más peinados y expresiones.
+- [x] Política de privacidad.
 
 ## Próximos pasos
 1. [x] Base de la app: estructura, diseño y armario guardado en el navegador (sin cuentas todavía).

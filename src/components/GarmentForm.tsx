@@ -10,7 +10,7 @@ import {
   type Category,
   type StyleId,
 } from "@/lib/catalog";
-import { guessColor, resizePhoto } from "@/lib/image";
+import { cleanBackground, guessColor, resizePhoto } from "@/lib/image";
 import { AiUnavailable, analyzeGarment } from "@/lib/ai";
 import { actions, newId, useArmario } from "@/lib/store";
 import type { Garment } from "@/lib/types";
@@ -51,6 +51,8 @@ export default function GarmentForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [colorGuessed, setColorGuessed] = useState(false);
+  // Foto original y con fondo limpio, para poder elegir.
+  const [versions, setVersions] = useState<{ original: string; clean: string | null } | null>(null);
   const [ai, setAi] = useState<"idle" | "working" | "done" | "error">("idle");
   const { account } = useArmario();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -62,8 +64,11 @@ export default function GarmentForm({
     if (!file) return;
     setError(null);
     try {
-      const { dataUrl, canvas } = await resizePhoto(file);
+      const { dataUrl: original, canvas } = await resizePhoto(file);
       const color = guessColor(canvas);
+      const clean = cleanBackground(canvas);
+      const dataUrl = clean ?? original;
+      setVersions({ original, clean });
       setForm((f) => ({ ...f, photo: dataUrl, color }));
       setColorGuessed(true);
       if (account) {
@@ -106,6 +111,7 @@ export default function GarmentForm({
       if (another) {
         setForm({ ...blank(), category: form.category, formality: DEFAULT_FORMALITY[form.category] });
         setColorGuessed(false);
+        setVersions(null);
         setAi("idle");
         if (fileRef.current) fileRef.current.value = "";
       }
@@ -157,6 +163,19 @@ export default function GarmentForm({
       )}
       {ai === "error" && (
         <p className="card mb-6 p-3 text-sm text-muted">No pude analizar la foto con IA. Completalo a mano.</p>
+      )}
+
+      {versions?.clean && (
+        <div className="-mt-4 mb-6 flex items-center justify-between gap-2 text-sm">
+          <span className="text-muted">{form.photo === versions.clean ? "✨ Le limpié el fondo" : "Foto original"}</span>
+          <button
+            type="button"
+            className="text-accent underline"
+            onClick={() => update("photo", form.photo === versions.clean ? versions.original : versions.clean!)}
+          >
+            {form.photo === versions.clean ? "Usar la original" : "Limpiar fondo"}
+          </button>
+        </div>
       )}
 
       <Section title="¿Qué es?">

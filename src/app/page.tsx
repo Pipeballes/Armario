@@ -35,6 +35,16 @@ export default function Home() {
         <p className="text-sm opacity-90">Elegí la ocasión y te armo opciones con tu ropa.</p>
       </Link>
 
+      <Link href="/semana" className="card mb-6 flex items-center gap-4 p-4">
+        <span className="text-3xl" aria-hidden>
+          📆
+        </span>
+        <span>
+          <span className="block font-semibold">Planificá tu semana</span>
+          <span className="block text-sm text-muted">Un outfit por día y qué ropa tener lista.</span>
+        </span>
+      </Link>
+
       {!profileDone && (
         <Link href="/perfil" className="card mb-6 flex items-center gap-4 border-accent p-4">
           <span className="text-3xl" aria-hidden>

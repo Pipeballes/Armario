@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 import {
   BODY_TYPES,
@@ -265,6 +266,11 @@ export default function PerfilPage() {
         </div>
         {status && <p className="mt-2 text-sm">{status}</p>}
       </Section>
+      <p className="mt-6 text-center text-sm">
+        <Link href="/privacidad" className="text-muted underline">
+          Política de privacidad
+        </Link>
+      </p>
     </div>
   );
 }

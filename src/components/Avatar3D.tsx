@@ -99,6 +99,9 @@ function Head({ skin, style, cap }: { skin: string; style: AvatarStyle; cap: boo
   });
   const hair = style.hairColor;
   const R = HEAD_R;
+  const expr = style.expression ?? "sonrisa";
+  const glasses = style.glasses ?? "ninguno";
+  const wink = expr === "guino";
   return (
     <group ref={head} position={[0, HEAD_Y, 0]}>
       {/* Cara */}
@@ -115,7 +118,13 @@ function Head({ skin, style, cap }: { skin: string; style: AvatarStyle; cap: boo
       ))}
       {/* Ojos con brillo */}
       <group ref={eyes} position={[0, 0.012, 0]}>
-        {[-1, 1].map((s) => (
+        {[-1, 1].map((s) =>
+          wink && s === 1 ? (
+            <mesh key={s} position={[s * 0.052, -0.004, R * 0.93]} rotation={[0.1, 0, Math.PI]}>
+              <torusGeometry args={[0.02, 0.005, 8, 16, Math.PI]} />
+              <meshBasicMaterial color="#2a1f1a" />
+            </mesh>
+          ) : (
           <group key={s} position={[s * 0.052, 0, R * 0.86]}>
             <mesh scale={[1, 1.15, 0.6]}>
               <sphereGeometry args={[0.03, 20, 20]} />
@@ -130,11 +139,16 @@ function Head({ skin, style, cap }: { skin: string; style: AvatarStyle; cap: boo
               <meshBasicMaterial color="#ffffff" />
             </mesh>
           </group>
-        ))}
+          ),
+        )}
       </group>
       {/* Cejas */}
       {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * 0.052, 0.058, R * 0.9]} rotation={[0, 0, Math.PI / 2 + s * 0.12]}>
+        <mesh
+          key={s}
+          position={[s * 0.052, expr === "feliz" ? 0.064 : 0.058, R * 0.9]}
+          rotation={[0, 0, Math.PI / 2 + s * (expr === "serio" ? -0.05 : 0.12)]}
+        >
           <capsuleGeometry args={[0.006, 0.03, 4, 8]} />
           <meshBasicMaterial color={hair} />
         </mesh>
@@ -144,11 +158,31 @@ function Head({ skin, style, cap }: { skin: string; style: AvatarStyle; cap: boo
         <sphereGeometry args={[0.014, 16, 16]} />
         <Mat color={skin} />
       </mesh>
-      {/* Sonrisa */}
-      <mesh position={[0, -0.05, R * 0.9]} rotation={[0.15, 0, Math.PI]}>
-        <torusGeometry args={[0.026, 0.0055, 8, 24, Math.PI]} />
-        <meshBasicMaterial color="#8a3b2e" />
-      </mesh>
+      {/* Boca según la expresión */}
+      {expr === "serio" ? (
+        <mesh position={[0, -0.058, R * 0.93]} rotation={[0, 0, Math.PI / 2]}>
+          <capsuleGeometry args={[0.005, 0.034, 4, 8]} />
+          <meshBasicMaterial color="#8a3b2e" />
+        </mesh>
+      ) : expr === "feliz" ? (
+        <group position={[0, -0.05, R * 0.9]} rotation={[0.15, 0, 0]}>
+          <mesh rotation={[0, 0, Math.PI]} scale={[1, 1, 0.4]}>
+            <circleGeometry args={[0.032, 24, 0, Math.PI]} />
+            <meshBasicMaterial color="#6e2a22" side={THREE.DoubleSide} />
+          </mesh>
+          <mesh position={[0, -0.019, 0.002]} scale={[1, 0.5, 1]}>
+            <circleGeometry args={[0.016, 16]} />
+            <meshBasicMaterial color="#e5736b" />
+          </mesh>
+        </group>
+      ) : (
+        <mesh position={[0, -0.05, R * 0.9]} rotation={[0.15, 0, Math.PI]}>
+          <torusGeometry args={[0.026, 0.0055, 8, 24, Math.PI]} />
+          <meshBasicMaterial color="#8a3b2e" />
+        </mesh>
+      )}
+      {/* Anteojos */}
+      {glasses !== "ninguno" && <Glasses kind={glasses} />}
       {/* Cachetes */}
       {[-1, 1].map((s) => (
         <mesh key={s} position={[s * 0.088, -0.03, R * 0.78]} rotation={[0, s * 0.5, 0]} scale={[1, 0.7, 0.25]}>
@@ -166,6 +200,53 @@ function Head({ skin, style, cap }: { skin: string; style: AvatarStyle; cap: boo
           <Mat color={hair} />
         </mesh>
       )}
+    </group>
+  );
+}
+
+
+function Glasses({ kind }: { kind: NonNullable<AvatarStyle["glasses"]> }) {
+  const R = HEAD_R;
+  const frame = kind === "sol" ? "#151515" : "#2b2b2b";
+  return (
+    <group position={[0, 0.012, R * 0.96]}>
+      {[-1, 1].map((s) => (
+        <group key={s} position={[s * 0.052, 0, 0]}>
+          {kind === "cuadrados" ? (
+            <mesh>
+              <boxGeometry args={[0.07, 0.05, 0.004]} />
+              <meshBasicMaterial color={frame} wireframe={false} transparent opacity={0.22} />
+            </mesh>
+          ) : (
+            <mesh>
+              <circleGeometry args={[0.036, 28]} />
+              <meshBasicMaterial color={kind === "sol" ? "#1d1d1d" : "#bfe3ff"} transparent opacity={kind === "sol" ? 0.92 : 0.18} />
+            </mesh>
+          )}
+          {kind === "cuadrados" ? (
+            <lineSegments>
+              <edgesGeometry args={[new THREE.BoxGeometry(0.07, 0.05, 0.004)]} />
+              <lineBasicMaterial color={frame} />
+            </lineSegments>
+          ) : (
+            <mesh>
+              <torusGeometry args={[0.036, 0.004, 8, 28]} />
+              <meshBasicMaterial color={frame} />
+            </mesh>
+          )}
+        </group>
+      ))}
+      {/* Puente y patillas */}
+      <mesh rotation={[0, 0, Math.PI / 2]}>
+        <capsuleGeometry args={[0.003, 0.024, 4, 6]} />
+        <meshBasicMaterial color={frame} />
+      </mesh>
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * 0.098, 0.004, -0.06]} rotation={[Math.PI / 2, 0, 0]}>
+          <capsuleGeometry args={[0.003, 0.11, 4, 6]} />
+          <meshBasicMaterial color={frame} />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -213,7 +294,7 @@ function Hair({ kind, color, backOnly = false }: { kind: AvatarStyle["hair"]; co
   }
   switch (kind) {
     case "rapado":
-      return cap(Math.PI * 0.36, 0.95);
+      return cap(Math.PI * 0.36, 1.03);
     case "rulos":
       return (
         <group>
@@ -240,6 +321,45 @@ function Hair({ kind, color, backOnly = false }: { kind: AvatarStyle["hair"]; co
               <Mat color={color} />
             </mesh>
           ))}
+        </group>
+      );
+    case "ondas":
+      return (
+        <group>
+          {cap(Math.PI * 0.4, 1.03)}
+          {[-1, 1].map((s) =>
+            [0, 1, 2].map((k) => (
+              <mesh key={`${s}${k}`} position={[s * (R * 0.92 - k * 0.006), -0.02 - k * 0.055, -0.02 - k * 0.01]}>
+                <sphereGeometry args={[0.045 - k * 0.004, 16, 16]} />
+                <Mat color={color} />
+              </mesh>
+            )),
+          )}
+          <mesh position={[0, -0.06, -0.09]} scale={[1.05, 1, 0.55]}>
+            <capsuleGeometry args={[0.11, 0.08, 8, 16]} />
+            <Mat color={color} />
+          </mesh>
+        </group>
+      );
+    case "cresta":
+      return (
+        <group>
+          {cap(Math.PI * 0.36, 1.03)}
+          {/* Cresta: una fila de mechones de adelante hacia atrás */}
+          {[0, 1, 2, 3, 4, 5].map((k) => {
+            const a = -0.35 + k * 0.32; // ángulo sobre la cabeza, de la frente a la nuca
+            return (
+              <mesh
+                key={k}
+                position={[0, Math.cos(a) * R * 1.02 + 0.01, Math.sin(-a) * R * 1.02]}
+                rotation={[-a, 0, 0]}
+                scale={[0.6, 1, 1.4]}
+              >
+                <coneGeometry args={[0.04, 0.1, 14]} />
+                <Mat color={color} />
+              </mesh>
+            );
+          })}
         </group>
       );
     case "recogido":

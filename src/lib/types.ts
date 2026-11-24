@@ -44,12 +44,18 @@ export interface Profile {
   calendars?: CalendarLink[];
   /** Cómo se ve el avatar del probador. */
   avatar?: AvatarStyle;
+  /** Días del planificador fijados a mano: fecha "YYYY-MM-DD" → ids de prendas. */
+  weekPlan?: Record<string, string[]>;
+  /** Outfits que marcaste con 👍 / 👎 (claves de ids ordenados). */
+  feedback?: { liked: string[]; disliked: string[] };
 }
 
 export interface AvatarStyle {
-  hair: "corto" | "largo" | "rapado" | "rulos" | "recogido";
+  hair: "corto" | "largo" | "rapado" | "rulos" | "recogido" | "ondas" | "cresta";
   hairColor: string;
   beard: boolean;
+  glasses?: "ninguno" | "redondos" | "cuadrados" | "sol";
+  expression?: "sonrisa" | "feliz" | "serio" | "guino";
 }
 
 export interface CalendarLink {
