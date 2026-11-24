@@ -35,6 +35,20 @@ export default function Home() {
         <p className="text-sm opacity-90">Elegí la ocasión y te armo opciones con tu ropa.</p>
       </Link>
 
+      {!profileDone && (
+        <Link href="/perfil" className="card mb-6 flex items-center gap-4 border-accent p-4">
+          <span className="text-3xl" aria-hidden>
+            🤳
+          </span>
+          <span>
+            <span className="block font-semibold">Subí una foto tuya</span>
+            <span className="block text-sm text-muted">
+              La IA te dice tu tono de piel, tu silueta y qué colores te quedan mejor.
+            </span>
+          </span>
+        </Link>
+      )}
+
       {!allDone && (
         <section className="card mb-6 p-5">
           <h2 className="mb-3 font-semibold">Para empezar</h2>

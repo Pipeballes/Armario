@@ -54,7 +54,7 @@ export default function AccountSection() {
   }
 
   return (
-    <section className="card mb-6 p-4">
+    <section id="cuenta" className="card mb-6 scroll-mt-4 p-4">
       <p className="mb-1 font-semibold">Guardá tu armario en la nube</p>
       <p className="mb-3 text-sm text-muted">
         Así no se pierde si cambiás de celular y lo ves desde la compu. Te mando un link a tu mail para entrar, sin

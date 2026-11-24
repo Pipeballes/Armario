@@ -103,8 +103,8 @@ export default function PerfilPage() {
         {account ? "Se guarda en tu cuenta." : "Por ahora se guarda solo en este dispositivo."}
       </p>
 
-      <AccountSection />
       <ProfileAnalysis />
+      <AccountSection />
 
       <Section title="Tu nombre">
         <input
