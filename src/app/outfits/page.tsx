@@ -7,6 +7,8 @@ import { suggestOutfits, type Outfit } from "@/lib/outfits";
 import { actions, useArmario } from "@/lib/store";
 import GarmentPhoto from "@/components/GarmentPhoto";
 import AgendaStrip from "@/components/AgendaStrip";
+import WeatherAuto from "@/components/WeatherAuto";
+import type { WeatherReading } from "@/lib/weather";
 import { formatWhen, type AgendaEvent } from "@/lib/agenda";
 import { Chip, ErrorBox, Loading, Section } from "@/components/ui";
 
@@ -22,7 +24,10 @@ function seeded(seed: number) {
 export default function OutfitsPage() {
   const { ready, garments, profile, error } = useArmario();
   const [occasion, setOccasion] = useState<OccasionId>("casual");
-  const [weather, setWeather] = useState<Weather>("templado");
+  // Clima: el que elegiste a mano, o si no el del pronóstico.
+  const [manualWeather, setManualWeather] = useState<Weather | null>(null);
+  const [auto, setAuto] = useState<WeatherReading | null>(null);
+  const weather: Weather = manualWeather ?? auto?.weather ?? "templado";
   const [seed, setSeed] = useState(0);
   const [worn, setWorn] = useState<Outfit | null>(null);
   const [event, setEvent] = useState<AgendaEvent | null>(null);
@@ -55,6 +60,7 @@ export default function OutfitsPage() {
         onSelect={(e) => {
           setEvent(e);
           setOccasion(e.occasion);
+          setManualWeather(null);
           setSeed(0);
           setWorn(null);
         }}
@@ -85,7 +91,7 @@ export default function OutfitsPage() {
               key={w.id}
               pressed={weather === w.id}
               onClick={() => {
-                setWeather(w.id);
+                setManualWeather(w.id === auto?.weather ? null : w.id);
                 reset();
               }}
             >
@@ -93,6 +99,7 @@ export default function OutfitsPage() {
             </Chip>
           ))}
         </div>
+        <WeatherAuto event={event} manual={manualWeather !== null} onReading={setAuto} />
       </Section>
 
       {event && (

@@ -11,6 +11,17 @@ export interface AgendaEvent {
   allDay: boolean;
   location: string | null;
   occasion: OccasionId;
+  /** De qué calendario viene (se completa en el celular al juntar varios). */
+  calendarName?: string;
+  calendarColor?: string;
+}
+
+/** Nombre y color que trae el archivo del calendario (iCloud los incluye). */
+export function calendarMeta(ics: string): { name: string | null; color: string | null } {
+  const unfolded = ics.replace(/\r?\n[ \t]/g, "");
+  const name = /^X-WR-CALNAME(?:;[^:]*)?:(.+)$/m.exec(unfolded)?.[1]?.trim() ?? null;
+  const rawColor = /^X-APPLE-CALENDAR-COLOR(?:;[^:]*)?:\s*(#[0-9a-f]{6})/im.exec(unfolded)?.[1] ?? null;
+  return { name: name ? name.replace(/\\,/g, ",").replace(/\\;/g, ";").slice(0, 60) : null, color: rawColor?.toLowerCase() ?? null };
 }
 
 const RULES: [RegExp, OccasionId][] = [

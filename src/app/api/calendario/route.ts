@@ -1,7 +1,7 @@
 // Lee el calendario del usuario (link .ics de iCloud, Google u Outlook) y devuelve los próximos eventos.
 
 import { createClient } from "@supabase/supabase-js";
-import { normalizeCalendarUrl } from "@/lib/agenda";
+import { calendarMeta, normalizeCalendarUrl } from "@/lib/agenda";
 import { eventsFromIcs } from "@/lib/ics";
 
 const MAX_BYTES = 3_000_000;
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
   const to = new Date(from.getTime() + DAYS * 86_400_000);
   try {
     const events = eventsFromIcs(text, from, to).slice(0, 60);
-    return Response.json({ events });
+    return Response.json({ events, calendar: calendarMeta(text) });
   } catch (e) {
     console.error("Error leyendo calendario", e);
     return fail(502, "No pude leer ese calendario.");

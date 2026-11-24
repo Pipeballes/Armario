@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { guessOccasion, normalizeCalendarUrl } from "./agenda";
+import { calendarMeta, guessOccasion, normalizeCalendarUrl } from "./agenda";
 import { eventsFromIcs } from "./ics";
 
 describe("guessOccasion", () => {
@@ -72,5 +72,16 @@ describe("eventsFromIcs", () => {
     expect(meeting.location).toBe("Oficina");
     expect(events.find((e) => e.title === "Casamiento de Sofi")!.allDay).toBe(true);
     expect(events.find((e) => e.title === "Gym")!.start).toBe("2026-11-24T22:00:00.000Z");
+  });
+});
+
+
+describe("calendarMeta", () => {
+  it("lee el nombre y el color que trae iCloud", () => {
+    const ics = "BEGIN:VCALENDAR\r\nX-WR-CALNAME:Facu\\, parciales\r\nX-APPLE-CALENDAR-COLOR:#FF2968\r\nEND:VCALENDAR";
+    expect(calendarMeta(ics)).toEqual({ name: "Facu, parciales", color: "#ff2968" });
+  });
+  it("si no los trae, devuelve null", () => {
+    expect(calendarMeta("BEGIN:VCALENDAR\r\nEND:VCALENDAR")).toEqual({ name: null, color: null });
   });
 });

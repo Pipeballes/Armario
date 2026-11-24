@@ -52,7 +52,8 @@ Primero es para uso personal. Se construye pensando en que más adelante la usen
 5. [ ] Publicar en Vercel e instalarla en el celular.
 
 ## Hecho además
-- [x] Conexión con el calendario del iPhone (iCloud) o de Google por link compartido: en "¿Qué me pongo?" aparecen los próximos eventos y se arma el outfit para cada uno.
+- [x] Conexión con varios calendarios del iPhone (iCloud) o de Google por link compartido, cada uno con su nombre y color: en "¿Qué me pongo?" aparecen los próximos eventos y se arma el outfit para cada uno.
+- [x] Clima automático con Open-Meteo (ubicación del celular o ciudad), para ahora o para la hora del evento, con aviso de lluvia.
 - [x] Entrada con código de 6 números por mail (enviado desde Gmail como "Armario").
 
 ## Para más adelante (si se vende)

@@ -37,8 +37,27 @@ export interface Profile {
   inspiration: string[];
   /** Consejo que dio la IA al analizar una foto. */
   aiAdvice?: string;
-  /** Link del calendario compartido (iCloud o Google) para planear outfits por evento. */
+  /** (Viejo) un solo link de calendario. Se lee como el primero de `calendars`. */
   calendarUrl?: string;
+  /** Calendarios compartidos (iCloud o Google), cada uno con su nombre y color. */
+  calendars?: CalendarLink[];
+}
+
+export interface CalendarLink {
+  id: string;
+  name: string;
+  /** Color en formato #rrggbb (el del calendario del iPhone, o el que elijas). */
+  color: string;
+  url: string;
+}
+
+/** Todos los calendarios del perfil, incluido el link viejo si había uno solo. */
+export function calendarsOf(p: Profile): CalendarLink[] {
+  const list = p.calendars ?? [];
+  if (p.calendarUrl && !list.some((c) => c.url === p.calendarUrl)) {
+    return [{ id: "principal", name: "Mi calendario", color: "#b5532f", url: p.calendarUrl }, ...list];
+  }
+  return list;
 }
 
 export const EMPTY_PROFILE: Profile = {
