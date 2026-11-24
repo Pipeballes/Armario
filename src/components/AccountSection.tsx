@@ -26,6 +26,19 @@ export default function AccountSection() {
     return () => clearTimeout(t);
   }, [cooldown]);
 
+  async function verify(token: string) {
+    if (busy) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await actions.verifyCode(email.trim(), token);
+    } catch {
+      setMsg("Ese código no es correcto o ya venció. Revisalo o pedí uno nuevo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function send() {
     setBusy(true);
     setMsg(null);
@@ -104,23 +117,15 @@ export default function AccountSection() {
       {sent ? (
         <form
           className="flex flex-col gap-2"
-          onSubmit={async (e) => {
+          onSubmit={(e) => {
             e.preventDefault();
-            setBusy(true);
-            setMsg(null);
-            try {
-              await actions.verifyCode(email.trim(), code);
-            } catch {
-              setMsg("Ese código no es correcto o ya venció. Revisalo o pedí uno nuevo.");
-            } finally {
-              setBusy(false);
-            }
+            verify(code);
           }}
         >
           <p className="text-sm">
             📬 Te mandé un mail de <strong>Armario</strong> a <strong className="break-all">{email}</strong> con un{" "}
-            <strong>código de 6 números</strong>. Escribilo acá. Si no aparece en un par de minutos, mirá en spam o
-            promociones.
+            <strong>código de 6 números</strong>. Copialo y tocá <strong>📋 Pegar código</strong>, o escribilo. Si no
+            aparece en un par de minutos, mirá en spam o promociones.
           </p>
           <input
             className="input text-center text-2xl tracking-[0.4em]"
@@ -130,12 +135,39 @@ export default function AccountSection() {
             maxLength={10}
             required
             value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, "");
+              setCode(digits);
+              // Al completar los 6 números (escritos, pegados o sugeridos por el teclado) entra solo.
+              if (digits.length === 6 && code.length !== 6) verify(digits);
+            }}
             aria-label="Código del mail"
           />
-          <button className="btn-primary" disabled={busy || code.length < 6}>
-            {busy ? "Entrando…" : "Entrar"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn-ghost shrink-0"
+              disabled={busy}
+              onClick={async () => {
+                try {
+                  const digits = (await navigator.clipboard.readText()).replace(/\D/g, "").slice(0, 10);
+                  if (digits.length < 6) {
+                    setMsg("No encontré un código copiado. En el mail tocá «Copiar código» (o copialo) y probá de nuevo.");
+                    return;
+                  }
+                  setCode(digits);
+                  verify(digits);
+                } catch {
+                  setMsg("No pude leer lo copiado. Tocá el campo, mantené apretado y elegí «Pegar».");
+                }
+              }}
+            >
+              📋 Pegar código
+            </button>
+            <button className="btn-primary flex-1" disabled={busy || code.length < 6}>
+              {busy ? "Entrando…" : "Entrar"}
+            </button>
+          </div>
           <p className="text-xs text-muted">
             El mail también trae un botón para entrar: sirve una sola vez y solo en este mismo dispositivo.
           </p>

@@ -97,10 +97,14 @@ export default function ProfileAnalysis() {
   return (
     <section className="card mb-6 border-accent p-4">
       <p className="mb-1 font-semibold">✨ Subí fotos tuyas y la IA arma tu perfil</p>
-      <p className="mb-2 text-sm text-muted">
-        Subí <strong>de 1 a {MAX_PHOTOS} fotos</strong>: de frente, de costado, de cuerpo entero y una de la cara con luz
-        natural. Con varias, la IA combina todo y no se queda con una sola impresión.
-      </p>
+      <ol className="mb-2 list-decimal space-y-0.5 pl-5 text-sm">
+        <li>
+          Elegí <strong>de 1 a {MAX_PHOTOS} fotos</strong> tuyas (de frente, de costado, la cara con luz natural).
+        </li>
+        <li>
+          Tocá <strong>✓ Listo</strong>.
+        </li>
+      </ol>
       <p className="mb-3 text-xs text-muted">
         Las fotos se mandan a la IA de Google para analizarlas y <strong>no se guardan</strong> en la app. En el plan
         gratis, Google puede usarlas para mejorar sus productos. Si preferís, completá todo a mano más abajo.
@@ -108,52 +112,71 @@ export default function ProfileAnalysis() {
 
       {!result && (
         <>
+          {/* Paso 1: elegir fotos */}
+          {photos.length === 0 && (
+            <label className={`btn-primary w-full cursor-pointer ${busy ? "pointer-events-none opacity-60" : ""}`}>
+              📷 Elegir fotos
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="sr-only"
+                onChange={(e) => {
+                  addPhotos(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          )}
+
+          {/* Paso 2: revisar y tocar Listo */}
           {photos.length > 0 && (
-            <div className="mb-3 grid grid-cols-5 gap-2">
-              {photos.map((src, i) => (
-                <div key={i} className="relative">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={src} alt={`Foto ${i + 1}`} className="aspect-[3/4] w-full rounded-lg object-cover" />
-                  {!busy && (
-                    <button
-                      type="button"
-                      aria-label={`Quitar foto ${i + 1}`}
-                      className="absolute -top-1.5 -right-1.5 h-6 w-6 rounded-full bg-black/70 text-xs text-white"
-                      onClick={() => setPhotos((p) => p.filter((_, j) => j !== i))}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
+            <div className="rounded-xl bg-surface-2 p-3">
+              <p className="mb-2 text-sm font-semibold">
+                {photos.length === 1 ? "1 foto elegida" : `${photos.length} fotos elegidas`}
+                {!busy && <span className="font-normal text-muted"> · tocá la ✕ para sacar una</span>}
+              </p>
+              <div className="mb-3 grid grid-cols-5 gap-2">
+                {photos.map((src, i) => (
+                  <div key={i} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={src} alt={`Foto ${i + 1}`} className="aspect-[3/4] w-full rounded-lg object-cover" />
+                    {!busy && (
+                      <button
+                        type="button"
+                        aria-label={`Quitar foto ${i + 1}`}
+                        className="absolute -top-1.5 -right-1.5 h-6 w-6 rounded-full bg-black/70 text-xs text-white"
+                        onClick={() => setPhotos((p) => p.filter((_, j) => j !== i))}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {!busy && photos.length < MAX_PHOTOS && (
+                  <label
+                    className="flex aspect-[3/4] cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-line text-xl text-muted"
+                    aria-label="Sumar más fotos"
+                  >
+                    ＋
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="sr-only"
+                      onChange={(e) => {
+                        addPhotos(e.target.files);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+              <button type="button" className="btn-primary w-full text-base" disabled={busy} onClick={analyze}>
+                {busy ? "✨ Analizando… (puede tardar unos segundos)" : "✓ Listo"}
+              </button>
             </div>
           )}
-          <div className="flex flex-col gap-2">
-            {photos.length < MAX_PHOTOS && (
-              <label
-                className={`${photos.length ? "btn-ghost" : "btn-primary"} w-full cursor-pointer ${busy ? "pointer-events-none opacity-60" : ""}`}
-              >
-                {photos.length ? "＋ Agregar otra foto" : "Elegir fotos mías"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="sr-only"
-                  onChange={(e) => {
-                    addPhotos(e.target.files);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
-            )}
-            {photos.length > 0 && (
-              <button type="button" className="btn-primary w-full" disabled={busy} onClick={analyze}>
-                {busy
-                  ? `Analizando ${photos.length === 1 ? "la foto" : `las ${photos.length} fotos`}…`
-                  : `✨ Analizar ${photos.length === 1 ? "1 foto" : `${photos.length} fotos`}`}
-              </button>
-            )}
-          </div>
         </>
       )}
 
