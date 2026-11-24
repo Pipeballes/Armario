@@ -464,3 +464,39 @@ export function sportFromText(text: string | undefined): string | undefined {
   if (!text) return undefined;
   return SPORTS.find((s) => s.re?.test(text))?.id;
 }
+
+/** Talles de calzado en US (el número que figura como "US" en la etiqueta). */
+export function shoeSizesUS(gender: string | null | undefined): string[] {
+  const [from, to] = gender === "mujer" ? [5, 11] : gender === "hombre" ? [6, 13] : [5, 13];
+  const out: string[] = [];
+  for (let n = from; n <= to; n += 0.5) out.push(String(n));
+  return out;
+}
+
+// Equivalencias europeas → US (hombre y mujer tienen escalas US distintas).
+const EU_TO_US_H: [number, number][] = [
+  [38, 6], [39, 6.5], [40, 7], [41, 8], [42, 8.5], [43, 9.5], [44, 10], [45, 11], [46, 12], [47, 12.5], [48, 13.5],
+];
+const EU_TO_US_M: [number, number][] = [
+  [35, 5], [36, 5.5], [37, 6.5], [38, 7.5], [39, 8], [40, 9], [41, 9.5], [42, 10.5], [43, 11],
+];
+
+/**
+ * Pasa un talle europeo o argentino a US. El argentino es más o menos uno menos que el europeo
+ * (un 41 argentino es un 42 europeo). Sin género se usa la escala de hombre (la "unisex" de US).
+ */
+export function toUSShoe(n: number, from: "eu" | "ar", gender: string | null | undefined): string | null {
+  const eu = from === "ar" ? n + 1 : n;
+  const table = gender === "mujer" ? EU_TO_US_M : EU_TO_US_H;
+  if (eu < table[0][0] - 1 || eu > table[table.length - 1][0] + 1) return null;
+  let us: number;
+  if (eu <= table[0][0]) us = table[0][1] - (table[0][0] - eu);
+  else if (eu >= table[table.length - 1][0]) us = table[table.length - 1][1] + (eu - table[table.length - 1][0]);
+  else {
+    const i = table.findIndex(([e]) => e >= eu);
+    const [e0, u0] = table[i - 1];
+    const [e1, u1] = table[i];
+    us = u0 + ((u1 - u0) * (eu - e0)) / (e1 - e0);
+  }
+  return String(Math.round(us * 2) / 2);
+}

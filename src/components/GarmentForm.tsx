@@ -9,6 +9,8 @@ import {
   categoriesFor,
   categoryView,
   groupKinds,
+  shoeSizesUS,
+  toUSShoe,
   kindLabelFor,
   SPORTS,
   kindById,
@@ -514,29 +516,38 @@ export default function GarmentForm({
       </Section>
 
       <div id="talle">
-        <Section
-          title="Talle"
-          hint={
-            form.photoLabel && ai === "done" && form.size
-              ? "Lo leí de la etiqueta. Si no es, corregilo."
-              : "Escribilo o sacale foto a la etiqueta y lo leo yo."
-          }
-        >
-          <div className="mb-2 flex flex-wrap gap-2">
-            {QUICK_SIZES.map((sz) => (
-              <Chip key={sz} pressed={form.size === sz} onClick={() => update("size", sz)}>
-                {sz}
-              </Chip>
-            ))}
-          </div>
-          <input
-            className="input"
-            value={form.size ?? ""}
-            onChange={(e) => update("size", e.target.value.slice(0, 12))}
-            placeholder="Ej: M, 42, 10, 38/40"
-            aria-label="Talle"
+        {form.category === "shoes" ? (
+          <ShoeSize
+            form={form}
+            gender={profile.gender}
+            onChange={(v) => update("size", v)}
+            labelRead={Boolean(form.photoLabel && ai === "done" && form.size)}
           />
-        </Section>
+        ) : (
+          <Section
+            title="Talle"
+            hint={
+              form.photoLabel && ai === "done" && form.size
+                ? "Lo leí de la etiqueta. Si no es, corregilo."
+                : "Escribilo o sacale foto a la etiqueta y lo leo yo."
+            }
+          >
+            <div className="mb-2 flex flex-wrap gap-2">
+              {QUICK_SIZES.map((sz) => (
+                <Chip key={sz} pressed={form.size === sz} onClick={() => update("size", sz)}>
+                  {sz}
+                </Chip>
+              ))}
+            </div>
+            <input
+              className="input"
+              value={form.size ?? ""}
+              onChange={(e) => update("size", e.target.value.slice(0, 12))}
+              placeholder="Ej: M, 42, 10, 38/40"
+              aria-label="Talle"
+            />
+          </Section>
+        )}
       </div>
 
       <Section title="Nombre (opcional)">
@@ -561,5 +572,77 @@ export default function GarmentForm({
         )}
       </div>
     </form>
+  );
+}
+
+/** Talle de calzado en US: botones con los talles y, si escribís uno argentino o europeo, lo paso a US. */
+function ShoeSize({
+  form,
+  gender,
+  onChange,
+  labelRead,
+}: {
+  form: { size?: string };
+  gender: string | null | undefined;
+  onChange: (v: string) => void;
+  labelRead: boolean;
+}) {
+  const [typed, setTyped] = useState("");
+  const n = Number(typed.replace(",", "."));
+  const local = typed && Number.isFinite(n) && n >= 30 ? n : null;
+  const fromAr = local ? toUSShoe(local, "ar", gender) : null;
+  const fromEu = local ? toUSShoe(local, "eu", gender) : null;
+  const scale = gender === "mujer" ? "US de mujer" : "US";
+  return (
+    <Section
+      title={`Talle (${scale})`}
+      hint={
+        labelRead
+          ? "Lo leí de la etiqueta. Si no es, corregilo."
+          : 'Elegí tu talle US (figura en la etiqueta como "US"). Si sabés el argentino o el europeo, escribilo abajo y lo paso.'
+      }
+    >
+      <div className="mb-2 flex flex-wrap gap-2">
+        {shoeSizesUS(gender).map((sz) => (
+          <Chip key={sz} pressed={form.size === `US ${sz}`} onClick={() => onChange(`US ${sz}`)}>
+            {sz}
+          </Chip>
+        ))}
+      </div>
+      <input
+        className="input"
+        inputMode="decimal"
+        value={typed}
+        onChange={(e) => {
+          const v = e.target.value.slice(0, 6);
+          setTyped(v);
+          const num = Number(v.replace(",", "."));
+          // Un número chico ya es US.
+          if (v && Number.isFinite(num) && num > 0 && num < 20) onChange(`US ${num}`);
+        }}
+        placeholder="¿Sabés otro talle? Ej: 42"
+        aria-label="Talle"
+      />
+      {local && (fromAr || fromEu) && (
+        <div className="mt-2 flex flex-wrap gap-2 text-sm">
+          <span className="text-muted">¿Ese {local} es…</span>
+          {fromAr && (
+            <Chip pressed={form.size === `US ${fromAr}`} onClick={() => onChange(`US ${fromAr}`)}>
+              argentino → US {fromAr}
+            </Chip>
+          )}
+          {fromEu && (
+            <Chip pressed={form.size === `US ${fromEu}`} onClick={() => onChange(`US ${fromEu}`)}>
+              europeo → US {fromEu}
+            </Chip>
+          )}
+        </div>
+      )}
+      {form.size && (
+        <p className="mt-2 text-sm">
+          Talle elegido: <strong>{form.size}</strong>
+        </p>
+      )}
+    </Section>
   );
 }

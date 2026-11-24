@@ -82,3 +82,19 @@ describe("slotOf", () => {
     expect(slotOf(g({ category: "top" }))).toBe("top");
   });
 });
+
+describe("talles de calzado US", () => {
+  it("ofrece talles US según el género", async () => {
+    const { shoeSizesUS } = await import("./catalog");
+    expect(shoeSizesUS("hombre")[0]).toBe("6");
+    expect(shoeSizesUS("hombre")).toContain("9.5");
+    expect(shoeSizesUS("mujer")[0]).toBe("5");
+  });
+  it("pasa europeo y argentino a US", async () => {
+    const { toUSShoe } = await import("./catalog");
+    expect(toUSShoe(42, "eu", "hombre")).toBe("8.5");
+    expect(toUSShoe(41, "ar", "hombre")).toBe("8.5");
+    expect(toUSShoe(38, "eu", "mujer")).toBe("7.5");
+    expect(toUSShoe(10, "eu", "hombre")).toBeNull();
+  });
+});

@@ -75,7 +75,7 @@ export const GARMENT_PROMPT = `Sos un asesor de moda. Mirá la foto de UNA prend
 - formality: 1 = para estar en casa o hacer deporte, 3 = casual arreglado, 5 = formal (traje, vestido de fiesta).
 - warmth: light (para calor), medium, warm (abriga mucho).
 - sport: "ninguno" si no es ropa deportiva. Si lo es: el deporte si es claro (botines o camiseta de fútbol → futbol, calzas de running → running, raqueta/pádel → padel-tenis, etc.) o "general" si sirve para entrenar en general.
-- size: el talle SOLO si se lee en una etiqueta (ej: "M", "XL", "42", "10"). Si no se ve, dejalo vacío; no lo adivines.`;
+- size: el talle SOLO si se lee en una etiqueta (ej: "M", "XL", "42", "10"). Si no se ve, dejalo vacío; no lo adivines. En calzado devolvé el talle US con el formato "US 9.5" (si la etiqueta solo trae el europeo, el brasileño o el argentino, pasalo a US).`;
 
 export const GARMENT_SCHEMA = {
   type: "OBJECT",
@@ -167,7 +167,10 @@ export function parseGarment(raw: unknown): GarmentAnalysis | null {
 export function parseSize(raw: unknown): string | undefined {
   if (typeof raw !== "string") return undefined;
   const s = raw.replace(/^\s*talle\s*:?\s*/i, "").trim().slice(0, 12);
-  return s && !/^(null|n\/?a|desconocido|no se ve)$/i.test(s) ? s.toUpperCase() : undefined;
+  if (!s || /^(null|n\/?a|desconocido|no se ve)$/i.test(s)) return undefined;
+  // "us9.5" o "US  9,5" → "US 9.5"
+  const us = /^us\s*([\d.,]+)$/i.exec(s);
+  return us ? `US ${us[1].replace(",", ".")}` : s.toUpperCase();
 }
 
 /** Valida la respuesta de la IA para el perfil. */

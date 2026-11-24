@@ -25,5 +25,6 @@ describe("parseSize", () => {
     expect(parseSize("")).toBeUndefined();
     expect(parseSize("no se ve")).toBeUndefined();
     expect(parseSize(null)).toBeUndefined();
+    expect(parseSize("us9,5")).toBe("US 9.5");
   });
 });
