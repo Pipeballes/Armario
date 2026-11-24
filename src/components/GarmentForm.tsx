@@ -11,7 +11,8 @@ import {
   type StyleId,
 } from "@/lib/catalog";
 import { guessColor, resizePhoto } from "@/lib/image";
-import { actions, newId } from "@/lib/store";
+import { AiUnavailable, analyzeGarment } from "@/lib/ai";
+import { actions, newId, useArmario } from "@/lib/store";
 import type { Garment } from "@/lib/types";
 import { Chip, Section, Swatch } from "./ui";
 
@@ -50,6 +51,8 @@ export default function GarmentForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [colorGuessed, setColorGuessed] = useState(false);
+  const [ai, setAi] = useState<"idle" | "working" | "done" | "error">("idle");
+  const { account } = useArmario();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
@@ -63,6 +66,16 @@ export default function GarmentForm({
       const color = guessColor(canvas);
       setForm((f) => ({ ...f, photo: dataUrl, color }));
       setColorGuessed(true);
+      if (account) {
+        setAi("working");
+        try {
+          const r = await analyzeGarment(dataUrl);
+          setForm((f) => ({ ...f, ...r, name: f.name || r.name }));
+          setAi("done");
+        } catch (e) {
+          setAi(e instanceof AiUnavailable ? "idle" : "error");
+        }
+      }
     } catch {
       setError("No se pudo leer esa foto. Probá con otra.");
     }
@@ -93,6 +106,7 @@ export default function GarmentForm({
       if (another) {
         setForm({ ...blank(), category: form.category, formality: DEFAULT_FORMALITY[form.category] });
         setColorGuessed(false);
+        setAi("idle");
         if (fileRef.current) fileRef.current.value = "";
       }
       onDone(another);
@@ -133,6 +147,18 @@ export default function GarmentForm({
         </label>
       </Section>
 
+      {ai === "working" && (
+        <p className="card mb-6 animate-pulse bg-accent-soft p-3 text-sm">✨ La IA está mirando la foto…</p>
+      )}
+      {ai === "done" && (
+        <p className="card mb-6 bg-accent-soft p-3 text-sm">
+          ✨ La IA completó los datos. Revisalos y corregí lo que haga falta.
+        </p>
+      )}
+      {ai === "error" && (
+        <p className="card mb-6 p-3 text-sm text-muted">No pude analizar la foto con IA. Completalo a mano.</p>
+      )}
+
       <Section title="¿Qué es?">
         <div className="flex flex-wrap gap-2">
           {CATEGORIES.map((c) => (
@@ -155,7 +181,7 @@ export default function GarmentForm({
 
       <Section
         title="Color principal"
-        hint={colorGuessed ? "Lo adiviné por la foto. Si no es, tocá el correcto." : undefined}
+        hint={colorGuessed && ai !== "done" ? "Lo adiviné por la foto. Si no es, tocá el correcto." : undefined}
       >
         <div className="flex flex-wrap gap-2">
           {COLORS.map((c) => (
@@ -226,7 +252,7 @@ export default function GarmentForm({
       {error && <p className="mb-4 text-sm text-danger">{error}</p>}
 
       <div className="flex flex-col gap-2">
-        <button type="submit" className="btn-primary" disabled={busy}>
+        <button type="submit" className="btn-primary" disabled={busy || ai === "working"}>
           {busy ? "Guardando…" : initial ? "Guardar cambios" : "Guardar prenda"}
         </button>
         {allowAnother && (

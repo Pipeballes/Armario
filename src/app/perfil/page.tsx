@@ -15,11 +15,13 @@ import { resizePhoto } from "@/lib/image";
 import { actions, useArmario } from "@/lib/store";
 import type { Profile } from "@/lib/types";
 import { Chip, ErrorBox, Loading, Section, Swatch } from "@/components/ui";
+import AccountSection from "@/components/AccountSection";
+import ProfileAnalysis from "@/components/ProfileAnalysis";
 
 const MAX_INSPIRATION = 12;
 
 export default function PerfilPage() {
-  const { ready, profile, garments, error } = useArmario();
+  const { ready, profile, garments, error, account } = useArmario();
   const [status, setStatus] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
 
@@ -43,14 +45,31 @@ export default function PerfilPage() {
     await save({ inspiration: [...profile.inspiration, ...photos] });
   }
 
-  function exportBackup() {
-    const backup: Backup = {
-      app: "armario",
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      profile,
-      garments,
+  async function exportBackup() {
+    setStatus("Preparando la copia…");
+    // Las fotos de la nube son links temporales: se guardan dentro de la copia.
+    const toData = async (src: string) => {
+      if (src.startsWith("data:")) return src;
+      const blob = await (await fetch(src)).blob();
+      return new Promise<string>((resolve) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.readAsDataURL(blob);
+      });
     };
+    let backup: Backup;
+    try {
+      backup = {
+        app: "armario",
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        profile: { ...profile, inspiration: await Promise.all(profile.inspiration.map(toData)) },
+        garments: await Promise.all(garments.map(async (g) => ({ ...g, photo: await toData(g.photo) }))),
+      };
+    } catch {
+      setStatus("No se pudo preparar la copia. Revisá tu conexión.");
+      return;
+    }
     const blob = new Blob([JSON.stringify(backup)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -80,8 +99,12 @@ export default function PerfilPage() {
     <div>
       <h1 className="page-title mb-1">Tu perfil</h1>
       <p className="mb-6 text-sm text-muted">
-        Con esto los outfits se adaptan a vos. Se guarda solo en este dispositivo.
+        Con esto los outfits se adaptan a vos.{" "}
+        {account ? "Se guarda en tu cuenta." : "Por ahora se guarda solo en este dispositivo."}
       </p>
+
+      <AccountSection />
+      <ProfileAnalysis />
 
       <Section title="Tu nombre">
         <input
@@ -221,7 +244,7 @@ export default function PerfilPage() {
 
       <Section
         title="Copia de seguridad"
-        hint="Tu armario vive en este navegador. Si borrás los datos o cambiás de celular, se pierde. Descargá una copia cada tanto."
+        hint={account ? "Tu armario ya está en la nube, pero podés bajarte una copia igual." : "Tu armario vive en este navegador. Si borrás los datos o cambiás de celular, se pierde. Descargá una copia cada tanto."}
       >
         <div className="flex flex-col gap-2 sm:flex-row">
           <button type="button" className="btn-ghost flex-1" onClick={exportBackup}>

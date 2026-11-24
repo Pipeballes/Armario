@@ -35,6 +35,8 @@ export interface Profile {
   styles: StyleId[];
   /** Fotos de looks que te inspiran (data URLs). */
   inspiration: string[];
+  /** Consejo que dio la IA al analizar una foto. */
+  aiAdvice?: string;
 }
 
 export const EMPTY_PROFILE: Profile = {

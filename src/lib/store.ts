@@ -1,85 +1,196 @@
 "use client";
 
-// Estado compartido entre pantallas: se carga una vez de IndexedDB y avisa los cambios.
+// Estado compartido entre pantallas. Sin sesión, todo se guarda en el navegador (IndexedDB).
+// Con sesión iniciada, se guarda en la nube (Supabase).
 
 import { useSyncExternalStore } from "react";
+import { createCloud, type Cloud } from "./cloud";
 import { db } from "./db";
+import { getSupabase } from "./supabase";
 import { EMPTY_PROFILE, type Garment, type Profile } from "./types";
+
+export interface Account {
+  id: string;
+  email: string;
+}
 
 interface State {
   ready: boolean;
   garments: Garment[];
   profile: Profile;
   error: string | null;
+  account: Account | null;
+  /** Prendas guardadas solo en este navegador (para ofrecer subirlas a la nube). */
+  localCount: number;
 }
 
-let state: State = { ready: false, garments: [], profile: EMPTY_PROFILE, error: null };
+const INITIAL: State = {
+  ready: false,
+  garments: [],
+  profile: EMPTY_PROFILE,
+  error: null,
+  account: null,
+  localCount: 0,
+};
+
+let state: State = INITIAL;
+let cloud: Cloud | null = null;
 const listeners = new Set<() => void>();
-let loading = false;
+let started = false;
+let loadToken = 0;
 
 function set(next: Partial<State>) {
   state = { ...state, ...next };
   listeners.forEach((l) => l());
 }
 
-function load() {
-  if (loading || state.ready) return;
-  loading = true;
-  Promise.all([db.listGarments(), db.getProfile()])
-    .then(([garments, profile]) => set({ ready: true, garments, profile }))
-    .catch(() =>
-      set({
-        ready: true,
-        error: "No se pudo abrir el armario guardado. Probá con otro navegador o sin modo incógnito.",
-      }),
-    );
+const sortGarments = (gs: Garment[]) => [...gs].sort((a, b) => b.createdAt - a.createdAt);
+
+async function loadFor(account: Account | null) {
+  const token = ++loadToken;
+  set({ ready: false, error: null, account });
+  try {
+    const sb = getSupabase();
+    if (account && sb) {
+      cloud = createCloud(sb, account.id);
+      const [garments, profile, local] = await Promise.all([
+        cloud.listGarments(),
+        cloud.getProfile(),
+        db.listGarments().catch(() => []),
+      ]);
+      if (token !== loadToken) return;
+      set({ ready: true, garments, profile, localCount: local.length });
+    } else {
+      cloud = null;
+      const [garments, profile] = await Promise.all([db.listGarments(), db.getProfile()]);
+      if (token !== loadToken) return;
+      set({ ready: true, garments, profile, localCount: garments.length });
+    }
+  } catch {
+    if (token !== loadToken) return;
+    set({
+      ready: true,
+      error: account
+        ? "No se pudo traer tu armario de la nube. Revisá tu conexión y recargá la página."
+        : "No se pudo abrir el armario guardado. Probá con otro navegador o sin modo incógnito.",
+    });
+  }
+}
+
+function start() {
+  if (started) return;
+  started = true;
+  const sb = getSupabase();
+  if (!sb) {
+    loadFor(null);
+    return;
+  }
+  let current: string | null | undefined;
+  sb.auth.onAuthStateChange((_event, session) => {
+    const user = session?.user ?? null;
+    const id = user?.id ?? null;
+    if (id === current) return;
+    current = id;
+    // Diferido: no se debe llamar a Supabase dentro de este callback.
+    setTimeout(() => loadFor(user ? { id: user.id, email: user.email ?? "" } : null), 0);
+  });
 }
 
 function subscribe(l: () => void) {
   listeners.add(l);
-  load();
+  start();
   return () => listeners.delete(l);
 }
-
-const serverState: State = { ready: false, garments: [], profile: EMPTY_PROFILE, error: null };
 
 export function useArmario(): State {
   return useSyncExternalStore(
     subscribe,
     () => state,
-    () => serverState,
+    () => INITIAL,
   );
 }
 
 export const actions = {
   async saveGarment(g: Garment) {
-    await db.saveGarment(g);
-    const others = state.garments.filter((x) => x.id !== g.id);
-    set({ garments: [g, ...others].sort((a, b) => b.createdAt - a.createdAt) });
+    const saved = cloud ? await cloud.saveGarment(g) : (await db.saveGarment(g), g);
+    set({ garments: sortGarments([saved, ...state.garments.filter((x) => x.id !== g.id)]) });
   },
   async deleteGarment(id: string) {
-    await db.deleteGarment(id);
+    if (cloud) await cloud.deleteGarment(id);
+    else await db.deleteGarment(id);
     set({ garments: state.garments.filter((x) => x.id !== id) });
   },
   async markWorn(ids: string[]) {
     const now = Date.now();
+    if (cloud) await cloud.markWorn(ids, now);
     const updated = state.garments.map((g) => (ids.includes(g.id) ? { ...g, lastWorn: now } : g));
-    await Promise.all(updated.filter((g) => ids.includes(g.id)).map((g) => db.saveGarment(g)));
+    if (!cloud) await Promise.all(updated.filter((g) => ids.includes(g.id)).map((g) => db.saveGarment(g)));
     set({ garments: updated });
   },
   async saveProfile(p: Profile) {
-    await db.saveProfile(p);
-    set({ profile: p });
+    const shown = cloud ? await cloud.saveProfile(p) : (await db.saveProfile(p), p);
+    set({ profile: shown });
   },
+  /** Reemplaza todo por una copia de seguridad (en el lugar donde se esté guardando). */
   async replaceAll(garments: Garment[], profile: Profile) {
     const merged = { ...EMPTY_PROFILE, ...profile };
-    await db.replaceAll(garments, merged);
-    set({ garments: [...garments].sort((a, b) => b.createdAt - a.createdAt), profile: merged });
+    if (cloud) {
+      for (const g of state.garments) await cloud.deleteGarment(g.id);
+      const saved: Garment[] = [];
+      for (const g of garments) saved.push(await cloud.saveGarment({ ...g, id: ensureUuid(g.id) }));
+      const shownProfile = await cloud.saveProfile(merged);
+      set({ garments: sortGarments(saved), profile: shownProfile });
+    } else {
+      await db.replaceAll(garments, merged);
+      set({ garments: sortGarments(garments), profile: merged, localCount: garments.length });
+    }
+  },
+  /** Sube a la nube lo guardado en este navegador. Devuelve cuántas prendas subió. */
+  async uploadLocal(onProgress?: (done: number, total: number) => void): Promise<number> {
+    if (!cloud) throw new Error("Primero iniciá sesión.");
+    const [local, localProfile] = await Promise.all([db.listGarments(), db.getProfile()]);
+    const existing = new Set(state.garments.map((g) => g.id));
+    const pending = local.filter((g) => !existing.has(g.id));
+    const saved: Garment[] = [];
+    for (const [i, g] of pending.entries()) {
+      saved.push(await cloud.saveGarment({ ...g, id: ensureUuid(g.id) }));
+      onProgress?.(i + 1, pending.length);
+    }
+    let profile = state.profile;
+    const cloudProfileEmpty = !profile.undertone && !profile.bodyType && profile.styles.length === 0;
+    if (cloudProfileEmpty) profile = await cloud.saveProfile(localProfile);
+    set({ garments: sortGarments([...saved, ...state.garments]), profile });
+    return saved.length;
+  },
+  async signIn(email: string): Promise<void> {
+    const sb = getSupabase();
+    if (!sb) throw new Error("La nube no está configurada.");
+    const { error } = await sb.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.origin + "/perfil" },
+    });
+    if (error) throw error;
+  },
+  async signOut(): Promise<void> {
+    await getSupabase()?.auth.signOut();
   },
 };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function ensureUuid(id: string): string {
+  return UUID.test(id) ? id : newId();
+}
 
 export function newId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    : "xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g, () => Math.floor(Math.random() * 16).toString(16));
+}
+
+/** Token de la sesión para llamar a las funciones del servidor (IA). */
+export async function getAccessToken(): Promise<string | null> {
+  const sb = getSupabase();
+  if (!sb) return null;
+  const { data } = await sb.auth.getSession();
+  return data.session?.access_token ?? null;
 }
