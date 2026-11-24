@@ -92,7 +92,7 @@ export default function AccountSection() {
     <section id="cuenta" className="card mb-6 scroll-mt-4 p-4">
       <p className="mb-1 font-semibold">Guardá tu armario en la nube</p>
       <p className="mb-3 text-sm text-muted">
-        Así no se pierde si cambiás de celular y lo ves desde la compu. Te mando un código a tu mail para entrar, sin
+        Así no se pierde si cambiás de celular y lo ves desde la compu. Te mando un mail para entrar, sin
         contraseña.
       </p>
       {msg && <p className="mb-3 rounded-xl bg-accent-soft p-3 text-sm">{msg}</p>}
@@ -113,14 +113,23 @@ export default function AccountSection() {
           }}
         >
           <p className="text-sm">
-            📬 Te mandé un mail a <strong className="break-all">{email}</strong> con un <strong>código</strong>.
-            Escribilo acá. Si no llega en un par de minutos, mirá en spam o promociones.
+            📬 Te mandé un mail a <strong className="break-all">{email}</strong>. Llega de{" "}
+            <strong>Supabase Auth</strong> (el servicio que guarda tu cuenta). Si no aparece en un par de minutos,
+            mirá en spam o promociones.
           </p>
+          <ul className="list-disc space-y-1 pl-5 text-sm">
+            <li>
+              Si trae un <strong>código</strong>, escribilo acá abajo.
+            </li>
+            <li>
+              Si trae un <strong>link</strong>, abrilo <strong>una sola vez</strong> y desde este mismo dispositivo.
+            </li>
+          </ul>
           <input
             className="input text-center text-2xl tracking-[0.4em]"
             inputMode="numeric"
             autoComplete="one-time-code"
-            placeholder="••••••"
+            placeholder="código"
             maxLength={10}
             required
             value={code}
@@ -130,9 +139,6 @@ export default function AccountSection() {
           <button className="btn-primary" disabled={busy || code.length < 6}>
             {busy ? "Entrando…" : "Entrar"}
           </button>
-          <p className="text-xs text-muted">
-            También podés tocar el link del mail, pero abrilo una sola vez y en este mismo dispositivo.
-          </p>
           <div className="flex gap-2">
             <button type="button" className="btn-ghost flex-1" disabled={busy || cooldown > 0} onClick={send}>
               {cooldown > 0 ? `Reenviar (${cooldown}s)` : "Reenviar mail"}
@@ -167,7 +173,7 @@ export default function AccountSection() {
             onChange={(e) => setEmail(e.target.value)}
           />
           <button className="btn-primary" disabled={busy}>
-            {busy ? "Mandando…" : "Mandame el código"}
+            {busy ? "Mandando…" : "Mandame el mail para entrar"}
           </button>
         </form>
       )}
