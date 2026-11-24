@@ -19,6 +19,7 @@ import { Chip, ErrorBox, Loading, Section, Swatch } from "@/components/ui";
 import AccountSection from "@/components/AccountSection";
 import ProfileAnalysis from "@/components/ProfileAnalysis";
 import CalendarSection from "@/components/CalendarSection";
+import ReminderSection from "@/components/ReminderSection";
 
 const MAX_INSPIRATION = 12;
 
@@ -126,6 +127,7 @@ export default function PerfilPage() {
       <ProfileAnalysis />
       <AccountSection />
       <CalendarSection />
+      <ReminderSection />
 
       <Section title="Tu nombre">
         <input
