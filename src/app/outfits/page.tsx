@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { CATEGORIES, OCCASIONS, WEATHERS, type OccasionId, type Weather, SPORTS, sportFromText } from "@/lib/catalog";
+import { OCCASIONS, categoryView, WEATHERS, type OccasionId, type Weather, SPORTS, sportFromText } from "@/lib/catalog";
 import { outfitKey, suggestOutfits, type Outfit } from "@/lib/outfits";
 import { AiUnavailable, chooseOutfit } from "@/lib/ai";
 import type { ChoiceResult } from "@/lib/ai-schema";
@@ -303,7 +303,7 @@ export default function OutfitsPage() {
                       <figure key={i.id}>
                         <GarmentPhoto garment={i} />
                         <figcaption className="mt-1 truncate text-xs text-muted">
-                          {CATEGORIES.find((c) => c.id === i.category)?.emoji} {i.name}
+                          {categoryView(i.category, profile.gender).emoji} {i.name}
                         </figcaption>
                       </figure>
                     ))}

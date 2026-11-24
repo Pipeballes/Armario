@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { slotOf } from "./avatar";
-import { CATEGORIES, categoriesFor, kindsFor } from "./catalog";
+import { CATEGORIES, categoriesFor, categoryView, kindsFor } from "./catalog";
 import type { Garment } from "./types";
 
 describe("kindsFor", () => {
@@ -12,16 +12,24 @@ describe("kindsFor", () => {
     );
   });
 
-  it("para mujer suma bombacha y corpiño, para hombre calzoncillo", () => {
-    expect(ids("interior", "mujer")).toEqual(expect.arrayContaining(["bombacha", "corpino"]));
-    expect(ids("interior", "mujer")).not.toContain("calzoncillo");
-    expect(ids("interior", "hombre")).toContain("calzoncillo");
-    expect(ids("interior", "hombre")).not.toContain("bombacha");
-    expect(ids("pijama", "mujer")).toContain("bombacha");
+  it("la misma prenda tiene su nombre según el género", () => {
+    const label = (g?: string) => kindsFor("interior", g).find((k) => k.id === "calzon")?.label;
+    expect(label("hombre")).toBe("Calzoncillo");
+    expect(label("mujer")).toBe("Bombacha");
+    expect(label("otro")).toBe("Calzoncillo / Bombacha");
+    const malla = (g?: string) => kindsFor("malla", g).find((k) => k.id === "malla-abajo")?.label;
+    expect(malla("hombre")).toBe("Short de baño");
+    expect(malla("mujer")).toBe("Bikini (abajo)");
+  });
+
+  it("corpiño solo para mujer", () => {
+    expect(ids("interior", "mujer")).toContain("corpino");
+    expect(ids("interior", "hombre")).not.toContain("corpino");
+    expect(ids("pijama", "mujer")).toContain("calzon");
   });
 
   it("sin género muestra todo", () => {
-    expect(ids("malla")).toEqual(expect.arrayContaining(["short-bano", "bikini-arriba", "enteriza", "otro"]));
+    expect(ids("malla")).toEqual(expect.arrayContaining(["malla-abajo", "bikini-arriba", "enteriza", "sunga", "otro"]));
   });
 
   it("todas las categorías tienen tipos y la opción Otro", () => {
@@ -37,10 +45,16 @@ describe("kindsFor", () => {
     expect(ids("shoes", "mujer")).toContain("tacos");
     expect(ids("accessory", "hombre")).toContain("corbata");
     expect(ids("accessory", "mujer")).not.toContain("corbata");
+    expect(ids("malla", "hombre")).toEqual(["malla-abajo", "sunga", "remera-uv", "otro"]);
   });
 
   it('con "otro" (o sin elegir) se ve todo', () => {
-    expect(ids("accessory", "otro")).toEqual(expect.arrayContaining(["corbata", "cartera"]));
+    expect(ids("accessory", "otro")).toEqual(expect.arrayContaining(["corbata", "cartera", "panuelo"]));
+  });
+
+  it("íconos según el género", () => {
+    expect(categoryView("malla", "hombre").emoji).toBe("🩳");
+    expect(categoryView("malla", "mujer").emoji).toBe("👙");
   });
 
   it("vestidos no aparecen para hombre", () => {
@@ -64,7 +78,7 @@ describe("slotOf", () => {
     expect(slotOf(g({ category: "pijama", kind: "remera" }))).toBe("top");
     expect(slotOf(g({ category: "pijama", kind: "short" }))).toBe("bottom");
     expect(slotOf(g({ category: "interior", kind: "medias" }))).toBeNull();
-    expect(slotOf(g({ category: "malla", kind: "short-bano" }))).toBe("bottom");
+    expect(slotOf(g({ category: "malla", kind: "malla-abajo" }))).toBe("bottom");
     expect(slotOf(g({ category: "top" }))).toBe("top");
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CATEGORIES } from "@/lib/catalog";
+import { categoriesFor } from "@/lib/catalog";
 import { useArmario } from "@/lib/store";
 import { ErrorBox, Loading } from "@/components/ui";
 
@@ -90,7 +90,7 @@ export default function Home() {
           </Link>
         </div>
         <div className="grid grid-cols-3 gap-2">
-          {CATEGORIES.map((c) => (
+          {categoriesFor(profile.gender).map((c) => (
             <Link key={c.id} href="/armario" className="card p-3 text-center">
               <span className="text-2xl" aria-hidden>
                 {c.emoji}

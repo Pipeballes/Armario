@@ -7,6 +7,8 @@ import {
   FORMALITY_LABELS,
   SPECIAL_CATEGORIES,
   categoriesFor,
+  categoryView,
+  kindLabelFor,
   SPORTS,
   kindById,
   kindsFor,
@@ -65,9 +67,13 @@ const KIND_TITLE: Record<Category, string> = {
   malla: "¿Qué malla es?",
 };
 
-function kindLabel(f: Pick<Garment, "category" | "kind" | "kindDetail">): string | null {
+function kindLabel(
+  f: Pick<Garment, "category" | "kind" | "kindDetail">,
+  gender: string | null | undefined,
+): string | null {
   if (!f.kind) return null;
-  const base = f.kind === "otro" ? f.kindDetail?.trim() || "Prenda" : (kindById(f.category, f.kind)?.label ?? "Prenda");
+  const k = kindById(f.category, f.kind);
+  const base = f.kind === "otro" ? f.kindDetail?.trim() || "Prenda" : k ? kindLabelFor(k, gender) : "Prenda";
   return f.category === "pijama" ? `${base} de pijama` : base;
 }
 
@@ -209,7 +215,7 @@ export default function GarmentForm({
       createdAt: initial?.createdAt ?? Date.now(),
       name:
         form.name.trim() ||
-        `${kindLabel(form) ?? cat.label} ${COLORS.find((c) => c.id === form.color)?.label.toLowerCase()}`,
+        `${kindLabel(form, profile.gender) ?? cat.label} ${COLORS.find((c) => c.id === form.color)?.label.toLowerCase()}`,
       sport: SPECIAL_CATEGORIES.includes(form.category) ? undefined : form.sport,
       kind: form.kind,
       kindDetail: form.kind === "otro" ? form.kindDetail?.trim() : undefined,
@@ -329,24 +335,27 @@ export default function GarmentForm({
 
       <Section title="Categoría">
         <div className="flex flex-wrap gap-2">
-          {CATEGORIES.filter((c) => categoriesFor(profile.gender).includes(c) || form.category === c.id).map(
-            (c) => (
-              <Chip
-                key={c.id}
-                pressed={form.category === c.id}
-                onClick={() =>
-                  setForm((f) => ({
-                    ...f,
-                    category: c.id,
-                    formality: initial ? f.formality : DEFAULT_FORMALITY[c.id],
-                    kind: kindById(c.id, f.kind) ? f.kind : undefined,
-                  }))
-                }
-              >
-                <span aria-hidden>{c.emoji}</span> {c.label}
-              </Chip>
-            ),
-          )}
+          {[
+            ...categoriesFor(profile.gender),
+            ...(categoriesFor(profile.gender).some((c) => c.id === form.category)
+              ? []
+              : [categoryView(form.category, profile.gender)]),
+          ].map((c) => (
+            <Chip
+              key={c.id}
+              pressed={form.category === c.id}
+              onClick={() =>
+                setForm((f) => ({
+                  ...f,
+                  category: c.id,
+                  formality: initial ? f.formality : DEFAULT_FORMALITY[c.id],
+                  kind: kindById(c.id, f.kind) ? f.kind : undefined,
+                }))
+              }
+            >
+              <span aria-hidden>{c.emoji}</span> {c.label}
+            </Chip>
+          ))}
         </div>
       </Section>
 

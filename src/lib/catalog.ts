@@ -7,22 +7,39 @@ export type Pattern = "liso" | "estampado";
 export type Temp = "warm" | "cool" | "neutral";
 export type Weather = "frio" | "templado" | "calor";
 
-export const CATEGORIES: { id: Category; label: string; plural: string; emoji: string }[] = [
+export const CATEGORIES: {
+  id: Category;
+  label: string;
+  plural: string;
+  emoji: string;
+  /** Ícono distinto para hombre / mujer (si no, se usa emoji). */
+  emojiH?: string;
+  emojiM?: string;
+}[] = [
   { id: "top", label: "Parte de arriba", plural: "Partes de arriba", emoji: "👕" },
   { id: "bottom", label: "Parte de abajo", plural: "Partes de abajo", emoji: "👖" },
-  { id: "dress", label: "Vestido / enterito", plural: "Vestidos y enteritos", emoji: "👗" },
+  { id: "dress", label: "Vestido o enterito", plural: "Vestidos y enteritos", emoji: "👗" },
   { id: "shoes", label: "Calzado", plural: "Calzado", emoji: "👟" },
   { id: "outerwear", label: "Abrigo", plural: "Abrigos", emoji: "🧥" },
   { id: "accessory", label: "Accesorio", plural: "Accesorios", emoji: "🧢" },
   { id: "pijama", label: "Pijama", plural: "Pijamas", emoji: "🛌" },
-  { id: "interior", label: "Ropa interior", plural: "Ropa interior", emoji: "🩲" },
-  { id: "malla", label: "Malla", plural: "Mallas", emoji: "🩱" },
+  { id: "interior", label: "Ropa interior", plural: "Ropa interior", emoji: "🩲", emojiH: "🩲", emojiM: "🎀" },
+  { id: "malla", label: "Malla", plural: "Mallas", emoji: "🩳", emojiH: "🩳", emojiM: "👙" },
 ];
 
 /** Categorías que no entran en los outfits de todos los días. */
 export const SPECIAL_CATEGORIES: Category[] = ["pijama", "interior", "malla"];
 
 type KindGender = "hombre" | "mujer";
+
+const isH = (g: string | null | undefined) => g === "hombre";
+const isM = (g: string | null | undefined) => g === "mujer";
+
+/** Cómo se ve una categoría según el género (ícono propio para hombre y mujer). */
+export function categoryView(id: Category, gender: string | null | undefined) {
+  const c = CATEGORIES.find((x) => x.id === id)!;
+  return { ...c, emoji: (isH(gender) && c.emojiH) || (isM(gender) && c.emojiM) || c.emoji };
+}
 /** Dónde va en el avatar (solo para pijama, ropa interior y malla). */
 type KindSlot = "top" | "bottom" | "outerwear" | "accessory" | null;
 export interface KindDef {
@@ -30,6 +47,8 @@ export interface KindDef {
   label: string;
   /** Si es solo para un género (con "otro" o sin género se ven todas). */
   only?: KindGender;
+  /** Nombre para mujer cuando es la misma prenda con otro nombre (ej: calzoncillo / bombacha). */
+  labelM?: string;
   slot?: KindSlot;
   /** Pistas para dibujarla en el avatar. */
   look?: "corta" | "larga" | "pollera" | "botas" | "gorro" | "bufanda";
@@ -40,19 +59,17 @@ const M = "mujer" as const;
 const OTHER: KindDef = { id: "otro", label: "Otro", slot: null };
 
 const UNDERWEAR: KindDef[] = [
-  { id: "calzoncillo", label: "Calzoncillo / slip", only: H, slot: "bottom" },
-  { id: "boxer", label: "Bóxer", only: H, slot: "bottom" },
-  { id: "bombacha", label: "Bombacha", only: M, slot: "bottom" },
-  { id: "culotte", label: "Culotte", only: M, slot: "bottom" },
-  { id: "tanga", label: "Tanga / colaless", only: M, slot: "bottom" },
+  { id: "calzon", label: "Calzoncillo", labelM: "Bombacha", slot: "bottom" },
+  { id: "boxer", label: "Bóxer", labelM: "Culotte", slot: "bottom" },
+  { id: "tanga", label: "Tanga o colaless", only: M, slot: "bottom" },
   { id: "corpino", label: "Corpiño", only: M, slot: "top" },
   { id: "corpino-deportivo", label: "Corpiño deportivo", only: M, slot: "top" },
-  { id: "top-interior", label: "Top / bralette", only: M, slot: "top" },
+  { id: "top-interior", label: "Top o bralette", only: M, slot: "top" },
   { id: "body-interior", label: "Body", only: M, slot: "top" },
   { id: "camiseta", label: "Camiseta", slot: "top" },
   { id: "medias", label: "Medias", slot: null },
   { id: "soquetes", label: "Soquetes", slot: null },
-  { id: "medias-cancan", label: "Medias de nylon / cancan", only: M, slot: null },
+  { id: "medias-cancan", label: "Medias de nylon o cancan", only: M, slot: null },
 ];
 
 /**
@@ -69,35 +86,35 @@ export const KINDS: Record<Category, KindDef[]> = {
     { id: "chomba", label: "Chomba", look: "corta" },
     { id: "buzo", label: "Buzo", look: "larga" },
     { id: "hoodie", label: "Buzo con capucha", look: "larga" },
-    { id: "sweater", label: "Sweater / pulóver", look: "larga" },
+    { id: "sweater", label: "Sweater o pulóver", look: "larga" },
     { id: "polera", label: "Polera (cuello alto)", look: "larga" },
     { id: "cardigan", label: "Cárdigan", look: "larga" },
     { id: "chaleco-tejido", label: "Chaleco tejido", look: "corta" },
-    { id: "camiseta-equipo", label: "Camiseta de fútbol / equipo", look: "corta" },
+    { id: "camiseta-equipo", label: "Camiseta de fútbol o de equipo", look: "corta" },
     { id: "blusa", label: "Blusa", only: M, look: "larga" },
     { id: "top", label: "Top", only: M, look: "corta" },
     { id: "crop-top", label: "Crop top", only: M, look: "corta" },
     { id: "body", label: "Body", only: M, look: "corta" },
-    { id: "corset", label: "Corset / corsé", only: M, look: "corta" },
-    { id: "tunica", label: "Túnica / camisola", only: M, look: "larga" },
+    { id: "corset", label: "Corset", only: M, look: "corta" },
+    { id: "tunica", label: "Túnica o camisola", only: M, look: "larga" },
     OTHER,
   ],
   bottom: [
     { id: "jean", label: "Jean" },
     { id: "pantalon-vestir", label: "Pantalón de vestir" },
-    { id: "chino", label: "Chino / gabardina" },
+    { id: "chino", label: "Chino o gabardina" },
     { id: "jogging", label: "Jogging" },
     { id: "cargo", label: "Cargo" },
     { id: "pantalon-lino", label: "Pantalón de lino" },
     { id: "short", label: "Short", look: "corta" },
     { id: "bermuda", label: "Bermuda", look: "corta" },
     { id: "calza", label: "Calza" },
-    { id: "calza-corta", label: "Calza corta / biker", only: M, look: "corta" },
+    { id: "calza-corta", label: "Calza corta o biker", only: M, look: "corta" },
     { id: "pollera-mini", label: "Pollera corta", only: M, look: "pollera" },
     { id: "pollera-midi", label: "Pollera midi", only: M, look: "pollera" },
     { id: "pollera-larga", label: "Pollera larga", only: M, look: "pollera" },
     { id: "short-pollera", label: "Short pollera", only: M, look: "pollera" },
-    { id: "palazzo", label: "Palazzo / pantalón ancho", only: M },
+    { id: "palazzo", label: "Palazzo o pantalón ancho", only: M },
     { id: "oxford", label: "Oxford", only: M },
     { id: "babucha", label: "Babucha", only: M },
     OTHER,
@@ -108,54 +125,54 @@ export const KINDS: Record<Category, KindDef[]> = {
     { id: "vestido-largo", label: "Vestido largo", look: "larga" },
     { id: "vestido-fiesta", label: "Vestido de fiesta", look: "larga" },
     { id: "solero", label: "Solero", look: "corta" },
-    { id: "enterito", label: "Enterito / mono", look: "larga" },
+    { id: "enterito", label: "Enterito o mono", look: "larga" },
     { id: "jardinero", label: "Jardinero", look: "larga" },
     OTHER,
   ],
   shoes: [
     { id: "zapatillas", label: "Zapatillas" },
-    { id: "zapatillas-deportivas", label: "Zapatillas deportivas / running" },
+    { id: "zapatillas-deportivas", label: "Zapatillas deportivas o running" },
     { id: "botines", label: "Botines de fútbol" },
     { id: "zapatos", label: "Zapatos" },
     { id: "mocasines", label: "Mocasines" },
     { id: "nauticos", label: "Náuticos" },
     { id: "borcegos", label: "Borcegos", look: "botas" },
-    { id: "botas", label: "Botas / botinetas", look: "botas" },
+    { id: "botas", label: "Botas o botinetas", look: "botas" },
     { id: "alpargatas", label: "Alpargatas" },
     { id: "sandalias", label: "Sandalias" },
     { id: "ojotas", label: "Ojotas" },
     { id: "pantuflas", label: "Pantuflas" },
-    { id: "tacos", label: "Tacos / stilettos", only: M },
+    { id: "tacos", label: "Tacos o stilettos", only: M },
     { id: "sandalias-taco", label: "Sandalias con taco", only: M },
     { id: "plataformas", label: "Plataformas", only: M },
-    { id: "chatitas", label: "Chatitas / balerinas", only: M },
-    { id: "botas-altas", label: "Botas altas / bucaneras", only: M, look: "botas" },
-    { id: "zuecos", label: "Zuecos / mules", only: M },
+    { id: "chatitas", label: "Chatitas o balerinas", only: M },
+    { id: "botas-altas", label: "Botas altas o bucaneras", only: M, look: "botas" },
+    { id: "zuecos", label: "Zuecos o mules", only: M },
     OTHER,
   ],
   outerwear: [
     { id: "campera", label: "Campera" },
     { id: "campera-jean", label: "Campera de jean" },
     { id: "campera-cuero", label: "Campera de cuero" },
-    { id: "campera-inflable", label: "Campera inflable / puffer" },
+    { id: "campera-inflable", label: "Campera inflable o puffer" },
     { id: "rompevientos", label: "Rompevientos" },
     { id: "parka", label: "Parka" },
     { id: "tapado", label: "Tapado" },
-    { id: "piloto", label: "Piloto / trench" },
-    { id: "saco", label: "Saco / blazer" },
+    { id: "piloto", label: "Piloto o trench" },
+    { id: "saco", label: "Saco o blazer" },
     { id: "chaleco", label: "Chaleco" },
-    { id: "polar", label: "Polar / micropolar" },
-    { id: "poncho", label: "Poncho / ruana" },
+    { id: "polar", label: "Polar o micropolar" },
+    { id: "poncho", label: "Poncho o ruana" },
     { id: "kimono", label: "Kimono", only: M },
     { id: "capa", label: "Capa", only: M },
-    { id: "torera", label: "Torera / bolero", only: M },
+    { id: "torera", label: "Torera o bolero", only: M },
     OTHER,
   ],
   accessory: [
     { id: "gorra", label: "Gorra", look: "gorro" },
     { id: "gorro", label: "Gorro de lana", look: "gorro" },
-    { id: "sombrero", label: "Sombrero / piluso", look: "gorro" },
-    { id: "bufanda", label: "Bufanda / cuello", look: "bufanda" },
+    { id: "sombrero", label: "Sombrero o piluso", look: "gorro" },
+    { id: "bufanda", label: "Bufanda o cuello", look: "bufanda" },
     { id: "guantes", label: "Guantes" },
     { id: "cinturon", label: "Cinturón" },
     { id: "anteojos-sol", label: "Anteojos de sol" },
@@ -163,7 +180,7 @@ export const KINDS: Record<Category, KindDef[]> = {
     { id: "mochila", label: "Mochila" },
     { id: "rinonera", label: "Riñonera" },
     { id: "billetera", label: "Billetera" },
-    { id: "collar", label: "Cadena / collar" },
+    { id: "collar", label: "Cadena o collar" },
     { id: "pulsera", label: "Pulsera" },
     { id: "anillo", label: "Anillo" },
     { id: "aros", label: "Aros" },
@@ -171,13 +188,12 @@ export const KINDS: Record<Category, KindDef[]> = {
     { id: "mono", label: "Moño (corbata)", only: H },
     { id: "tiradores", label: "Tiradores", only: H },
     { id: "gemelos", label: "Gemelos", only: H },
-    { id: "morral", label: "Morral / bandolera", only: H },
-    { id: "cartera", label: "Cartera", only: M },
-    { id: "bolso", label: "Bolso / tote", only: M },
-    { id: "sobre", label: "Sobre / clutch", only: M },
+    { id: "cartera", label: "Morral", labelM: "Cartera" },
+    { id: "bolso", label: "Bolso o tote", only: M },
+    { id: "sobre", label: "Sobre o clutch", only: M },
     { id: "panuelo", label: "Pañuelo", only: M, look: "bufanda" },
     { id: "vincha", label: "Vincha", only: M },
-    { id: "accesorio-pelo", label: "Hebilla / colita / scrunchie", only: M },
+    { id: "accesorio-pelo", label: "Hebilla, colita o scrunchie", only: M },
     OTHER,
   ],
   pijama: [
@@ -187,7 +203,7 @@ export const KINDS: Record<Category, KindDef[]> = {
     { id: "pantalon", label: "Pantalón", slot: "bottom" },
     { id: "buzo", label: "Buzo", slot: "outerwear" },
     { id: "bata", label: "Bata", slot: "outerwear" },
-    { id: "enterito-pijama", label: "Enterito / mameluco", slot: "top", look: "larga" },
+    { id: "enterito-pijama", label: "Enterito o mameluco", slot: "top", look: "larga" },
     { id: "camison", label: "Camisón", only: M, slot: "top", look: "corta" },
     { id: "babydoll", label: "Babydoll", only: M, slot: "top", look: "corta" },
     ...UNDERWEAR,
@@ -196,30 +212,37 @@ export const KINDS: Record<Category, KindDef[]> = {
   ],
   interior: [...UNDERWEAR, OTHER],
   malla: [
-    { id: "short-bano", label: "Short de baño", only: H, slot: "bottom", look: "corta" },
-    { id: "slip-bano", label: "Slip / sunga", only: H, slot: "bottom", look: "corta" },
+    { id: "malla-abajo", label: "Short de baño", labelM: "Bikini (abajo)", slot: "bottom", look: "corta" },
+    { id: "sunga", label: "Sunga", only: H, slot: "bottom", look: "corta" },
     { id: "bikini-arriba", label: "Bikini (arriba)", only: M, slot: "top", look: "corta" },
-    { id: "bikini-abajo", label: "Bikini (abajo)", only: M, slot: "bottom", look: "corta" },
     { id: "enteriza", label: "Malla enteriza", only: M, slot: "top", look: "corta" },
     { id: "trikini", label: "Trikini", only: M, slot: "top", look: "corta" },
-    { id: "pareo", label: "Pareo / salida de baño", only: M, slot: "outerwear" },
-    { id: "remera-uv", label: "Remera de agua / UV", slot: "top", look: "corta" },
+    { id: "pareo", label: "Pareo o salida de baño", only: M, slot: "outerwear" },
+    { id: "remera-uv", label: "Remera de agua (UV)", slot: "top", look: "corta" },
     OTHER,
   ],
 };
 
 /** Tipos para mostrar según el género (sin género o "otro": todos). */
 export function kindsFor(category: Category, gender: string | null | undefined): KindDef[] {
-  const list = KINDS[category];
-  if (gender !== "hombre" && gender !== "mujer") return list;
-  return list.filter((k) => !k.only || k.only === gender);
+  return KINDS[category]
+    .filter((k) => !k.only || (!isH(gender) && !isM(gender)) || k.only === gender)
+    .map((k) => ({ ...k, label: kindLabelFor(k, gender) }));
+}
+
+/** Nombre según el género: "Calzoncillo" (hombre), "Bombacha" (mujer), "Calzoncillo / Bombacha" (otro). */
+export function kindLabelFor(k: KindDef, gender: string | null | undefined): string {
+  if (!k.labelM) return k.label;
+  if (isH(gender)) return k.label;
+  if (isM(gender)) return k.labelM;
+  return `${k.label} / ${k.labelM}`;
 }
 
 export const kindById = (category: Category, id: string | undefined) => KINDS[category].find((k) => k.id === id);
 
 /** Categorías que se ven según el género (los vestidos no aparecen para hombre). */
 export function categoriesFor(gender: string | null | undefined) {
-  return CATEGORIES.filter((c) => gender !== "hombre" || c.id !== "dress");
+  return CATEGORIES.filter((c) => !isH(gender) || c.id !== "dress").map((c) => categoryView(c.id, gender));
 }
 
 export interface ColorDef {

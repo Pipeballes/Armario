@@ -61,8 +61,8 @@ const ids = <T extends { id: string }>(xs: readonly T[]) => xs.map((x) => x.id);
 
 export const GARMENT_PROMPT = `Sos un asesor de moda. Mirá la foto de UNA prenda y clasificala.
 - name: nombre corto en español rioplatense (ej: "Remera blanca básica", "Jean azul recto").
-- category: top (remeras, camisas, buzos, sweaters), bottom (pantalones, shorts, polleras), dress (vestidos, enteritos), shoes, outerwear (camperas, tapados, sacos), accessory (gorras, cinturones, bolsos, bufandas), pijama (ropa de dormir), interior (calzoncillos, bombachas, corpiños, medias), malla (traje de baño).
-- kind: qué prenda es exactamente, de la lista (ej: remera, camisa, hoodie, jean, pollera-midi, zapatillas, borcegos, campera-inflable, gorra, short-bano). Tiene que corresponder a la category elegida. Si ninguno encaja, "otro".
+- category: top (remeras, camisas, buzos, sweaters), bottom (pantalones, shorts, polleras), dress (vestidos, enteritos), shoes, outerwear (camperas, tapados, sacos), accessory (gorras, cinturones, bolsos, bufandas), pijama (ropa de dormir), interior (calzoncillos o bombachas, corpiños, medias), malla (traje de baño).
+- kind: qué prenda es exactamente, de la lista (ej: remera, camisa, hoodie, jean, pollera-midi, zapatillas, borcegos, campera-inflable, gorra, calzon, malla-abajo). Tiene que corresponder a la category elegida. Si ninguno encaja, "otro".
 - color: el color principal de la prenda (no del fondo), el más cercano de la lista.
 - pattern: liso o estampado (rayas, cuadros, flores, logos grandes cuentan como estampado).
 - styles: de 1 a 3 estilos que le correspondan.

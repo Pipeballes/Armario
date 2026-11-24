@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CATEGORIES, COLORS, colorById, sportById, type Category } from "@/lib/catalog";
+import { CATEGORIES, COLORS, categoryView, colorById, sportById, type Category } from "@/lib/catalog";
 import { actions, useArmario } from "@/lib/store";
 import type { Garment } from "@/lib/types";
 import GarmentForm from "@/components/GarmentForm";
@@ -71,7 +71,7 @@ export default function ArmarioPage() {
             <Chip pressed={category === "all"} onClick={() => setCategory("all")}>
               Todo ({garments.length})
             </Chip>
-            {CATEGORIES.map((c) => {
+            {CATEGORIES.map(({ id }) => categoryView(id, profile.gender)).map((c) => {
               const count = garments.filter((g) => g.category === c.id).length;
               if (count === 0) return null;
               return (

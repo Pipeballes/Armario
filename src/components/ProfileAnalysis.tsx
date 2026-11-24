@@ -122,7 +122,7 @@ export default function ProfileAnalysis() {
         ...current,
         hair: r.avatar.hair ?? current.hair,
         hairColor: (r.avatar.hairColor && HAIR_COLOR_BY_ID[r.avatar.hairColor]) || current.hairColor,
-        beard: r.avatar.beard ?? current.beard,
+        beard: profile.gender === "mujer" ? false : (r.avatar.beard ?? current.beard),
         glasses: r.avatar.glasses ?? current.glasses,
       },
     });
@@ -147,8 +147,9 @@ export default function ProfileAnalysis() {
     <section className="card mb-6 border-accent p-4">
       <p className="mb-1 font-semibold">✨ Tus fotos y lo que ve la IA</p>
       <p className="mb-3 text-sm text-muted">
-        Subí hasta {MAX_PHOTOS} fotos tuyas (de frente, de costado, la cara con luz natural; mientras más, mejor). La IA te dice tu subtono,
-        tu tono de piel y tu silueta, y arma tu avatar 3D con tu peinado, color de pelo, barba y anteojos.
+        Subí hasta {MAX_PHOTOS} fotos tuyas (de frente, de costado, la cara con luz natural; mientras más, mejor). La IA
+        te dice tu subtono, tu tono de piel y tu silueta, y arma tu avatar 3D con tu peinado, color de pelo
+        {profile.gender === "mujer" ? "" : ", barba"} y anteojos.
       </p>
 
       {!result && (
@@ -157,8 +158,8 @@ export default function ProfileAnalysis() {
             <>
               {analyzed && (
                 <p className="mb-2 rounded-xl bg-surface-2 p-3 text-sm">
-                  Las fotos que usaste antes no se guardaban. Subilas de nuevo y van a quedar acá, con la opción de sumar
-                  más.
+                  Las fotos que usaste antes no se guardaban. Subilas de nuevo y van a quedar acá, con la opción de
+                  sumar más.
                 </p>
               )}
               <label className={`btn-primary w-full cursor-pointer ${saving ? "pointer-events-none opacity-60" : ""}`}>
@@ -203,7 +204,12 @@ export default function ProfileAnalysis() {
                   </label>
                 )}
               </div>
-              <button type="button" className="btn-primary w-full text-base" disabled={busy || saving} onClick={analyze}>
+              <button
+                type="button"
+                className="btn-primary w-full text-base"
+                disabled={busy || saving}
+                onClick={analyze}
+              >
                 {busy
                   ? "✨ Analizando… (puede tardar unos segundos)"
                   : analyzed
@@ -213,8 +219,8 @@ export default function ProfileAnalysis() {
             </div>
           )}
           <p className="mt-2 text-xs text-muted">
-            Tus fotos quedan guardadas en tu cuenta, privadas, para que puedas sumar más. Se mandan a la IA de Google solo
-            cuando tocás analizar (en el plan gratis, Google puede usarlas para mejorar sus productos).
+            Tus fotos quedan guardadas en tu cuenta, privadas, para que puedas sumar más. Se mandan a la IA de Google
+            solo cuando tocás analizar (en el plan gratis, Google puede usarlas para mejorar sus productos).
           </p>
         </>
       )}
@@ -229,7 +235,7 @@ export default function ProfileAnalysis() {
           <p>
             <strong>Para tu avatar:</strong> pelo {label(HAIRS, result.avatar.hair).toLowerCase()}
             {result.avatar.hairColor ? ` ${result.avatar.hairColor.replace("-", " ")}` : ""}
-            {result.avatar.beard ? ", con barba" : ""}
+            {result.avatar.beard && profile.gender !== "mujer" ? ", con barba" : ""}
             {result.avatar.glasses && result.avatar.glasses !== "ninguno"
               ? `, anteojos ${label(GLASSES, result.avatar.glasses).toLowerCase()}`
               : ""}
@@ -245,8 +251,8 @@ export default function ProfileAnalysis() {
             </button>
           </div>
           <p className="text-xs text-muted">
-            &quot;Usar estos datos&quot; reemplaza tu perfil actual y arma tu avatar. &quot;Descartar&quot; deja todo como
-            estaba.
+            &quot;Usar estos datos&quot; reemplaza tu perfil actual y arma tu avatar. &quot;Descartar&quot; deja todo
+            como estaba.
           </p>
         </div>
       )}

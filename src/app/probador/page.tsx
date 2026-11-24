@@ -37,9 +37,12 @@ const VIEWS: { id: View; label: string; hint: string }[] = [
   { id: "costado", label: "Costado", hint: "" },
   { id: "espalda", label: "Espalda", hint: "" },
   { id: "cara", label: "🙂 Cara", hint: "" },
-  { id: "otro", label: "👀 Cómo te ven", hint: "Así te vería alguien parado a unos 2 metros, a la altura de sus ojos." },
+  {
+    id: "otro",
+    label: "👀 Cómo te ven",
+    hint: "Así te vería alguien parado a unos 2 metros, a la altura de sus ojos.",
+  },
 ];
-
 
 function initialSelection(): Selection {
   try {
@@ -143,7 +146,13 @@ export default function ProbadorPage() {
               <span className="label">Peinado</span>
               <div className="flex flex-wrap gap-2">
                 {HAIRS.map((h) => (
-                  <button key={h.id} type="button" className="chip" aria-pressed={style.hair === h.id} onClick={() => setStyle({ hair: h.id })}>
+                  <button
+                    key={h.id}
+                    type="button"
+                    className="chip"
+                    aria-pressed={style.hair === h.id}
+                    onClick={() => setStyle({ hair: h.id })}
+                  >
                     {h.label}
                   </button>
                 ))}
@@ -165,22 +174,40 @@ export default function ProbadorPage() {
                 ))}
               </div>
             </div>
-            <div>
-              <span className="label">Barba</span>
-              <div className="flex gap-2">
-                <button type="button" className="chip" aria-pressed={!style.beard} onClick={() => setStyle({ beard: false })}>
-                  Sin barba
-                </button>
-                <button type="button" className="chip" aria-pressed={style.beard} onClick={() => setStyle({ beard: true })}>
-                  Con barba
-                </button>
+            {profile.gender !== "mujer" && (
+              <div>
+                <span className="label">Barba</span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="chip"
+                    aria-pressed={!style.beard}
+                    onClick={() => setStyle({ beard: false })}
+                  >
+                    Sin barba
+                  </button>
+                  <button
+                    type="button"
+                    className="chip"
+                    aria-pressed={style.beard}
+                    onClick={() => setStyle({ beard: true })}
+                  >
+                    Con barba
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
             <div>
               <span className="label">Anteojos</span>
               <div className="flex flex-wrap gap-2">
                 {GLASSES.map((g) => (
-                  <button key={g.id} type="button" className="chip" aria-pressed={(style.glasses ?? "ninguno") === g.id} onClick={() => setStyle({ glasses: g.id })}>
+                  <button
+                    key={g.id}
+                    type="button"
+                    className="chip"
+                    aria-pressed={(style.glasses ?? "ninguno") === g.id}
+                    onClick={() => setStyle({ glasses: g.id })}
+                  >
                     {g.label}
                   </button>
                 ))}
@@ -190,7 +217,16 @@ export default function ProbadorPage() {
               <span className="label">Expresión</span>
               <div className="flex flex-wrap gap-2">
                 {EXPRESSIONS.map((e) => (
-                  <button key={e.id} type="button" className="chip" aria-pressed={(style.expression ?? "sonrisa") === e.id} onClick={() => { setStyle({ expression: e.id }); setView("cara"); }}>
+                  <button
+                    key={e.id}
+                    type="button"
+                    className="chip"
+                    aria-pressed={(style.expression ?? "sonrisa") === e.id}
+                    onClick={() => {
+                      setStyle({ expression: e.id });
+                      setView("cara");
+                    }}
+                  >
                     {e.label}
                   </button>
                 ))}
