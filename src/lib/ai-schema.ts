@@ -158,7 +158,7 @@ Opciones (todas con ropa que la persona ya tiene):
 ${opts}
 
 Ordená las opciones de la mejor a la peor para esta ocasión y esta persona (order, con los ids tal cual).
-En "why" explicá en 2 o 3 frases cortas por qué la primera es la mejor (colores, ocasión, silueta).
+En "why" explicá en 2 o 3 frases cortas por qué la primera es la mejor (colores, ocasión, silueta). No digas "Opción" ni números: nombrá las prendas.
 En "tip" dá un consejo concreto para completar el look (cómo llevarla, qué accesorio sumar). Nunca critiques el cuerpo.`;
 }
 
