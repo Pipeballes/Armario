@@ -54,6 +54,7 @@ Primero es para uso personal. Se construye pensando en que más adelante la usen
 ## Hecho además
 - [x] Conexión con varios calendarios del iPhone (iCloud) o de Google por link compartido, cada uno con su nombre y color: en "¿Qué me pongo?" aparecen los próximos eventos y se arma el outfit para cada uno.
 - [x] Clima automático con Open-Meteo (ubicación del celular o ciudad), para ahora o para la hora del evento, con aviso de lluvia.
+- [x] Probador 3D: avatar tipo maniquí con altura, silueta y tono de piel del perfil; se viste con la ropa del armario (colores y tipo de prenda); vistas de frente, costado, espalda y "cómo te ven" (otra persona a unos 2 m); se gira con el dedo.
 - [x] Entrada con código de 6 números por mail (enviado desde Gmail como "Armario").
 
 ## Para más adelante (si se vende)

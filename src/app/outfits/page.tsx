@@ -8,6 +8,8 @@ import { actions, useArmario } from "@/lib/store";
 import GarmentPhoto from "@/components/GarmentPhoto";
 import AgendaStrip from "@/components/AgendaStrip";
 import WeatherAuto from "@/components/WeatherAuto";
+import { PROBAR_KEY, selectionFrom } from "@/lib/avatar";
+import { useRouter } from "next/navigation";
 import type { WeatherReading } from "@/lib/weather";
 import { formatWhen, type AgendaEvent } from "@/lib/agenda";
 import { Chip, ErrorBox, Loading, Section } from "@/components/ui";
@@ -23,6 +25,7 @@ function seeded(seed: number) {
 
 export default function OutfitsPage() {
   const { ready, garments, profile, error } = useArmario();
+  const router = useRouter();
   const [occasion, setOccasion] = useState<OccasionId>("casual");
   // Clima: el que elegiste a mano, o si no el del pronóstico.
   const [manualWeather, setManualWeather] = useState<Weather | null>(null);
@@ -170,6 +173,19 @@ export default function OutfitsPage() {
                       ))}
                     </ul>
                   )}
+                  <button
+                    className="btn-ghost mb-2 w-full"
+                    onClick={() => {
+                      try {
+                        sessionStorage.setItem(PROBAR_KEY, JSON.stringify(selectionFrom(o.items)));
+                      } catch {
+                        /* sin almacenamiento: el probador arranca vacío */
+                      }
+                      router.push("/probador");
+                    }}
+                  >
+                    🧍 Probar en 3D
+                  </button>
                   <button
                     className="btn-ghost w-full"
                     onClick={async () => {
