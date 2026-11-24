@@ -44,30 +44,39 @@ export async function POST(request: Request) {
   if (body.kind !== "prenda" && body.kind !== "perfil") return fail(400, "Tipo de análisis inválido.");
 
   const isGarment = body.kind === "prenda";
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            { inline_data: { mime_type: match[1], data: match[2] } },
-            { text: isGarment ? GARMENT_PROMPT : PROFILE_PROMPT },
-          ],
-        },
-      ],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: isGarment ? GARMENT_SCHEMA : PROFILE_SCHEMA,
-        temperature: 0.2,
+  const payload = JSON.stringify({
+    contents: [
+      {
+        parts: [
+          { inline_data: { mime_type: match[1], data: match[2] } },
+          { text: isGarment ? GARMENT_PROMPT : PROFILE_PROMPT },
+        ],
       },
-    }),
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: isGarment ? GARMENT_SCHEMA : PROFILE_SCHEMA,
+      temperature: 0.2,
+    },
   });
+
+  // Se prueba el modelo principal y, si no está disponible, el de respaldo.
+  const models = [...new Set([process.env.GEMINI_MODEL || "gemini-3.5-flash-lite", "gemini-2.5-flash"])];
+  let res: Response | null = null;
+  for (const model of models) {
+    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+      body: payload,
+    });
+    if (res.ok || ![404, 500, 503].includes(res.status)) break;
+    console.error("Gemini", model, res.status, (await res.text()).slice(0, 300));
+  }
+  if (!res) return fail(502, "La IA no respondió. Probá de nuevo.");
 
   if (res.status === 429) return fail(429, "Se usó todo el cupo gratis de la IA por ahora. Probá en un rato.");
   if (!res.ok) {
-    console.error("Gemini error", res.status, (await res.text()).slice(0, 500));
+    console.error("Gemini error", res.status, (await res.text().catch(() => "")).slice(0, 500));
     return fail(502, "La IA no respondió. Probá de nuevo.");
   }
 
