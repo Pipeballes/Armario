@@ -134,40 +134,47 @@ export function createCloud(sb: SupabaseClient, userId: string) {
       const { data, error } = await sb.from("profiles").select("data").eq("user_id", userId).maybeSingle();
       if (error) throw error;
       const stored = { ...EMPTY_PROFILE, ...((data?.data as Partial<Profile>) ?? {}) };
-      // En la nube "inspiration" guarda rutas; para mostrar se cambian por URLs firmadas.
-      const urls = await signAll(sb, stored.inspiration);
-      return { ...stored, inspiration: stored.inspiration.map((p) => urls.get(p) ?? "").filter(Boolean) };
+      // En la nube las fotos del perfil se guardan como rutas; para mostrar se cambian por URLs firmadas.
+      const selfies = stored.selfies ?? [];
+      const urls = await signAll(sb, [...stored.inspiration, ...selfies]);
+      const show = (list: string[]) => list.map((p) => urls.get(p) ?? "").filter(Boolean);
+      return { ...stored, inspiration: show(stored.inspiration), selfies: show(selfies) };
     },
 
-    /** Guarda el perfil subiendo las fotos de inspiración nuevas. Devuelve el perfil para mostrar. */
+    /** Guarda el perfil subiendo las fotos nuevas (inspiración y fotos tuyas). Devuelve el perfil para mostrar. */
     async saveProfile(p: Profile): Promise<Profile> {
-      const paths: string[] = [];
-      const shown: string[] = [];
-      const newPaths: string[] = [];
-      for (const [i, src] of p.inspiration.entries()) {
-        const known = pathBySrc.get(src);
-        if (known && !src.startsWith("data:")) {
-          paths.push(known);
-          shown.push(src);
-        } else {
-          const path = `${userId}/inspiracion-${Date.now()}-${i}.jpg`;
-          await upload(sb, path, src);
-          paths.push(path);
-          newPaths.push(path);
-          shown.push(src);
+      const store = async (list: string[], prefix: string) => {
+        const paths: string[] = [];
+        const fresh: string[] = [];
+        for (const [i, src] of list.entries()) {
+          const known = pathBySrc.get(src);
+          if (known && !src.startsWith("data:")) {
+            paths.push(known);
+          } else {
+            const path = `${userId}/${prefix}-${Date.now()}-${i}.jpg`;
+            await upload(sb, path, src);
+            paths.push(path);
+            fresh.push(path);
+          }
         }
-      }
-      const signed = await signAll(sb, newPaths);
-      const display = shown.map((src, i) => signed.get(paths[i]) ?? src);
+        const signed = await signAll(sb, fresh);
+        return { paths, display: list.map((src, i) => signed.get(paths[i]) ?? src) };
+      };
+      const insp = await store(p.inspiration, "inspiracion");
+      const self = await store(p.selfies ?? [], "yo");
 
       const { data: old } = await sb.from("profiles").select("data").eq("user_id", userId).maybeSingle();
-      const { error } = await sb
-        .from("profiles")
-        .upsert({ user_id: userId, data: { ...p, inspiration: paths }, updated_at: new Date().toISOString() });
+      const { error } = await sb.from("profiles").upsert({
+        user_id: userId,
+        data: { ...p, inspiration: insp.paths, selfies: self.paths },
+        updated_at: new Date().toISOString(),
+      });
       if (error) throw error;
-      const removed = ((old?.data as Partial<Profile>)?.inspiration ?? []).filter((x) => !paths.includes(x));
+      const before = (old?.data as Partial<Profile>) ?? {};
+      const keep = new Set([...insp.paths, ...self.paths]);
+      const removed = [...(before.inspiration ?? []), ...(before.selfies ?? [])].filter((x) => !keep.has(x));
       if (removed.length) await sb.storage.from(BUCKET).remove(removed);
-      return { ...p, inspiration: display };
+      return { ...p, inspiration: insp.display, selfies: self.display };
     },
   };
 }

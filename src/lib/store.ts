@@ -39,6 +39,17 @@ const listeners = new Set<() => void>();
 let started = false;
 let loadToken = 0;
 let profileQueue: Promise<void> = Promise.resolve();
+let pendingSaves = 0;
+
+// Si todavía se está guardando algo (ej: subiendo fotos), el navegador avisa antes de cerrar.
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", (e) => {
+    if (pendingSaves > 0) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
+}
 
 function set(next: Partial<State>) {
   state = { ...state, ...next };
@@ -134,6 +145,7 @@ export const actions = {
    */
   saveProfile(p: Profile): Promise<void> {
     set({ profile: p });
+    pendingSaves++;
     const run = profileQueue.then(async () => {
       const target = cloud;
       const shown = target ? await target.saveProfile(p) : (await db.saveProfile(p), p);
@@ -141,6 +153,9 @@ export const actions = {
       if (state.profile === p) set({ profile: shown });
     });
     profileQueue = run.catch(() => {});
+    run.finally(() => {
+      pendingSaves--;
+    }).catch(() => {});
     return run;
   },
   /** Reemplaza todo por una copia de seguridad (en el lugar donde se esté guardando). */

@@ -1,24 +1,38 @@
 "use client";
 
 import { useState } from "react";
-import { BODY_TYPES, SKIN_DEPTHS, UNDERTONES } from "@/lib/catalog";
+import { BODY_TYPES, PALETTE_BY_UNDERTONE, SKIN_DEPTHS, UNDERTONES, colorById, type Undertone } from "@/lib/catalog";
+import { Swatch } from "./ui";
 import { AiUnavailable, analyzeProfile } from "@/lib/ai";
 import type { ProfileAnalysis as Analysis } from "@/lib/ai-schema";
+import { HAIRS, HAIR_COLOR_BY_ID, GLASSES, avatarOf } from "@/lib/avatar";
 import { resizePhoto } from "@/lib/image";
 import { actions, useArmario } from "@/lib/store";
 import { cloudEnabled } from "@/lib/supabase";
 
 const MAX_PHOTOS = 5;
 
-const label = (list: readonly { id: string; label: string }[], id: string | null) =>
+const label = (list: readonly { id: string; label: string }[], id: string | null | undefined) =>
   list.find((x) => x.id === id)?.label ?? "No se pudo ver";
+
+/** Convierte una foto guardada (link) en data URL para mandarla a la IA. */
+async function toDataUrl(src: string): Promise<string> {
+  if (src.startsWith("data:")) return src;
+  const blob = await (await fetch(src)).blob();
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result as string);
+    r.onerror = () => reject(new Error("No pude leer una de tus fotos guardadas."));
+    r.readAsDataURL(blob);
+  });
+}
 
 export default function ProfileAnalysis() {
   const { account, profile } = useArmario();
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<Analysis | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const [photos, setPhotos] = useState<string[]>([]);
 
   if (!cloudEnabled) return null;
 
@@ -27,8 +41,8 @@ export default function ProfileAnalysis() {
       <section className="card mb-6 border-accent p-4">
         <p className="mb-1 font-semibold">✨ Subí fotos tuyas y la IA arma tu perfil</p>
         <p className="mb-3 text-sm text-muted">
-          Te dice tu subtono, tu tono de piel y tu silueta en segundos. Para usar la IA primero entrá con tu mail (es
-          gratis y sin contraseña).
+          Te dice tu subtono, tu tono de piel, tu silueta y arma tu avatar 3D. Para usar la IA primero entrá con tu mail
+          (es gratis y sin contraseña).
         </p>
         <button
           type="button"
@@ -45,6 +59,9 @@ export default function ProfileAnalysis() {
     );
   }
 
+  const photos = profile.selfies ?? [];
+  const analyzed = Boolean(profile.undertone || profile.aiAdvice);
+
   async function addPhotos(list: FileList | null) {
     // Copia: el navegador vacía la lista cuando se resetea el campo.
     const files = list ? [...list] : [];
@@ -53,21 +70,30 @@ export default function ProfileAnalysis() {
     setResult(null);
     const room = MAX_PHOTOS - photos.length;
     if (room <= 0) return;
+    setSaving(true);
     try {
       // Fotos más chicas para que entren varias en un solo envío.
       const added = await Promise.all(files.slice(0, room).map((f) => resizePhoto(f, 800).then((r) => r.dataUrl)));
-      setPhotos((p) => [...p, ...added].slice(0, MAX_PHOTOS));
-      if (files.length > room) setMsg(`Hasta ${MAX_PHOTOS} fotos: usé las primeras.`);
+      await actions.saveProfile({ ...profile, selfies: [...photos, ...added].slice(0, MAX_PHOTOS) });
+      if (files.length > room) setMsg(`Hasta ${MAX_PHOTOS} fotos: guardé las primeras.`);
     } catch {
-      setMsg("No pude leer alguna de las fotos. Probá con otra.");
+      setMsg("No pude guardar alguna de las fotos. Probá de nuevo.");
+    } finally {
+      setSaving(false);
     }
+  }
+
+  async function removePhoto(i: number) {
+    setResult(null);
+    await actions.saveProfile({ ...profile, selfies: photos.filter((_, j) => j !== i) });
   }
 
   async function analyze() {
     setBusy(true);
     setMsg(null);
     try {
-      setResult(await analyzeProfile(photos));
+      const images = await Promise.all(photos.map(toDataUrl));
+      setResult(await analyzeProfile(images, profile.gender));
     } catch (e) {
       setMsg(
         e instanceof AiUnavailable
@@ -82,71 +108,75 @@ export default function ProfileAnalysis() {
   }
 
   async function apply(r: Analysis) {
+    const current = avatarOf(profile);
     await actions.saveProfile({
       ...profile,
       undertone: r.undertone ?? profile.undertone,
       skinDepth: r.skinDepth ?? profile.skinDepth,
       bodyType: r.bodyType ?? profile.bodyType,
       aiAdvice: r.advice || profile.aiAdvice,
+      // El avatar 3D toma tus rasgos de las fotos.
+      avatar: {
+        ...current,
+        hair: r.avatar.hair ?? current.hair,
+        hairColor: (r.avatar.hairColor && HAIR_COLOR_BY_ID[r.avatar.hairColor]) || current.hairColor,
+        beard: r.avatar.beard ?? current.beard,
+        glasses: r.avatar.glasses ?? current.glasses,
+      },
     });
     setResult(null);
-    setPhotos([]);
-    setMsg("¡Listo! Guardé los datos en tu perfil. Podés corregirlos abajo.");
+    setMsg("¡Listo! Guardé los datos en tu perfil y armé tu avatar en el Probador.");
   }
+
+  const fileInput = (
+    <input
+      type="file"
+      accept="image/*"
+      multiple
+      className="sr-only"
+      onChange={(e) => {
+        addPhotos(e.target.files);
+        e.target.value = "";
+      }}
+    />
+  );
 
   return (
     <section className="card mb-6 border-accent p-4">
-      <p className="mb-1 font-semibold">✨ Subí fotos tuyas y la IA arma tu perfil</p>
-      <ol className="mb-2 list-decimal space-y-0.5 pl-5 text-sm">
-        <li>
-          Elegí <strong>de 1 a {MAX_PHOTOS} fotos</strong> tuyas (de frente, de costado, la cara con luz natural).
-        </li>
-        <li>
-          Tocá <strong>✓ Listo</strong>.
-        </li>
-      </ol>
-      <p className="mb-3 text-xs text-muted">
-        Las fotos se mandan a la IA de Google para analizarlas y <strong>no se guardan</strong> en la app. En el plan
-        gratis, Google puede usarlas para mejorar sus productos. Si preferís, completá todo a mano más abajo.
+      <p className="mb-1 font-semibold">✨ Tus fotos y lo que ve la IA</p>
+      <p className="mb-3 text-sm text-muted">
+        Subí de 1 a {MAX_PHOTOS} fotos tuyas (de frente, de costado, la cara con luz natural). La IA te dice tu subtono,
+        tu tono de piel y tu silueta, y arma tu avatar 3D con tu peinado, color de pelo, barba y anteojos.
       </p>
 
       {!result && (
         <>
-          {/* Paso 1: elegir fotos */}
-          {photos.length === 0 && (
-            <label className={`btn-primary w-full cursor-pointer ${busy ? "pointer-events-none opacity-60" : ""}`}>
-              📷 Elegir fotos
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="sr-only"
-                onChange={(e) => {
-                  addPhotos(e.target.files);
-                  e.target.value = "";
-                }}
-              />
+          {photos.length === 0 ? (
+            <label className={`btn-primary w-full cursor-pointer ${saving ? "pointer-events-none opacity-60" : ""}`}>
+              {saving ? "Guardando…" : "📷 Elegir fotos"}
+              {fileInput}
             </label>
-          )}
-
-          {/* Paso 2: revisar y tocar Listo */}
-          {photos.length > 0 && (
+          ) : (
             <div className="rounded-xl bg-surface-2 p-3">
               <p className="mb-2 text-sm font-semibold">
-                {photos.length === 1 ? "1 foto elegida" : `${photos.length} fotos elegidas`}
-                {!busy && <span className="font-normal text-muted"> · tocá la ✕ para sacar una</span>}
+                Tus fotos ({photos.length}/{MAX_PHOTOS})
+                {saving ? (
+                  <span className="font-normal text-muted"> · Guardando… no cierres la app</span>
+                ) : (
+                  !busy && <span className="font-normal text-muted"> · ✕ para sacar · ＋ para sumar</span>
+                )}
               </p>
               <div className="mb-3 grid grid-cols-5 gap-2">
                 {photos.map((src, i) => (
-                  <div key={i} className="relative">
+                  <div key={src.slice(-40) + i} className="relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={src} alt={`Foto ${i + 1}`} className="aspect-[3/4] w-full rounded-lg object-cover" />
+                    <img src={src} alt={`Tu foto ${i + 1}`} className="aspect-[3/4] w-full rounded-lg object-cover" />
                     {!busy && (
                       <button
                         type="button"
-                        aria-label={`Quitar foto ${i + 1}`}
+                        aria-label={`Sacar foto ${i + 1}`}
                         className="absolute -top-1.5 -right-1.5 h-6 w-6 rounded-full bg-black/70 text-xs text-white"
-                        onClick={() => setPhotos((p) => p.filter((_, j) => j !== i))}
+                        onClick={() => removePhoto(i)}
                       >
                         ✕
                       </button>
@@ -155,42 +185,46 @@ export default function ProfileAnalysis() {
                 ))}
                 {!busy && photos.length < MAX_PHOTOS && (
                   <label
-                    className="flex aspect-[3/4] cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-line text-xl text-muted"
+                    className={`flex aspect-[3/4] cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-line text-xl text-muted ${saving ? "pointer-events-none opacity-60" : ""}`}
                     aria-label="Sumar más fotos"
                   >
-                    ＋
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="sr-only"
-                      onChange={(e) => {
-                        addPhotos(e.target.files);
-                        e.target.value = "";
-                      }}
-                    />
+                    {saving ? "…" : "＋"}
+                    {fileInput}
                   </label>
                 )}
               </div>
-              <button type="button" className="btn-primary w-full text-base" disabled={busy} onClick={analyze}>
-                {busy ? "✨ Analizando… (puede tardar unos segundos)" : "✓ Listo"}
+              <button type="button" className="btn-primary w-full text-base" disabled={busy || saving} onClick={analyze}>
+                {busy
+                  ? "✨ Analizando… (puede tardar unos segundos)"
+                  : analyzed
+                    ? "✨ Analizar de nuevo con todas"
+                    : "✓ Listo, analizar"}
               </button>
             </div>
           )}
+          <p className="mt-2 text-xs text-muted">
+            Tus fotos quedan guardadas en tu cuenta, privadas, para que puedas sumar más. Se mandan a la IA de Google solo
+            cuando tocás analizar (en el plan gratis, Google puede usarlas para mejorar sus productos).
+          </p>
         </>
       )}
 
       {result && (
         <div className="space-y-2 text-sm">
+          <p className="font-semibold">Esto ve la IA en tus fotos:</p>
           <p>
-            <strong>Subtono:</strong> {label(UNDERTONES, result.undertone)}
+            <strong>Subtono:</strong> {label(UNDERTONES, result.undertone)} · <strong>Piel:</strong>{" "}
+            {label(SKIN_DEPTHS, result.skinDepth)} · <strong>Silueta:</strong> {label(BODY_TYPES, result.bodyType)}
           </p>
           <p>
-            <strong>Tono de piel:</strong> {label(SKIN_DEPTHS, result.skinDepth)}
+            <strong>Para tu avatar:</strong> pelo {label(HAIRS, result.avatar.hair).toLowerCase()}
+            {result.avatar.hairColor ? ` ${result.avatar.hairColor.replace("-", " ")}` : ""}
+            {result.avatar.beard ? ", con barba" : ""}
+            {result.avatar.glasses && result.avatar.glasses !== "ninguno"
+              ? `, anteojos ${label(GLASSES, result.avatar.glasses).toLowerCase()}`
+              : ""}
           </p>
-          <p>
-            <strong>Silueta:</strong> {label(BODY_TYPES, result.bodyType)}
-          </p>
+          {result.undertone && <Palette undertone={result.undertone} />}
           {result.advice && <p className="rounded-xl bg-accent-soft p-3">💡 {result.advice}</p>}
           <div className="flex gap-2 pt-1">
             <button className="btn-primary flex-1" onClick={() => apply(result)}>
@@ -200,13 +234,45 @@ export default function ProfileAnalysis() {
               Descartar
             </button>
           </div>
+          <p className="text-xs text-muted">
+            &quot;Usar estos datos&quot; reemplaza tu perfil actual y arma tu avatar. &quot;Descartar&quot; deja todo como
+            estaba.
+          </p>
         </div>
       )}
 
       {msg && <p className="mt-2 text-sm">{msg}</p>}
-      {profile.aiAdvice && !result && (
-        <p className="mt-3 rounded-xl bg-surface-2 p-3 text-sm">💡 {profile.aiAdvice}</p>
+
+      {!result && analyzed && (
+        <div className="mt-4 space-y-2 rounded-xl bg-surface-2 p-3 text-sm">
+          <p className="font-semibold">Tu perfil ahora</p>
+          {(profile.undertone || profile.skinDepth || profile.bodyType) && (
+            <p className="text-muted">
+              Subtono {label(UNDERTONES, profile.undertone).toLowerCase()} · piel{" "}
+              {label(SKIN_DEPTHS, profile.skinDepth).toLowerCase()} · silueta{" "}
+              {label(BODY_TYPES, profile.bodyType).toLowerCase()}
+            </p>
+          )}
+          {profile.undertone && <Palette undertone={profile.undertone} />}
+          {profile.aiAdvice && <p>💡 {profile.aiAdvice}</p>}
+        </div>
       )}
     </section>
+  );
+}
+
+/** Colores que más favorecen cerca de la cara según el subtono. */
+function Palette({ undertone }: { undertone: Undertone }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-xs font-semibold tracking-wide text-muted uppercase">🎨 Tus colores</p>
+      <div className="flex flex-wrap gap-1.5">
+        {PALETTE_BY_UNDERTONE[undertone].map((id) => (
+          <span key={id} className="chip px-2.5 py-1 text-xs">
+            <Swatch colorId={id} size={14} /> {colorById(id).label}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }

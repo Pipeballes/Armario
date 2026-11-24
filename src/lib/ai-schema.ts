@@ -32,7 +32,19 @@ export interface ProfileAnalysis {
   skinDepth: SkinDepth | null;
   bodyType: BodyType | null;
   advice: string;
+  /** Rasgos para que el avatar 3D se parezca a la persona. */
+  avatar: {
+    hair: (typeof HAIR_IDS)[number] | null;
+    hairColor: (typeof HAIR_COLOR_IDS)[number] | null;
+    beard: boolean | null;
+    glasses: (typeof GLASSES_IDS)[number] | null;
+  };
 }
+
+/** Peinados, colores de pelo y anteojos que la IA puede elegir (coinciden con el avatar). */
+export const HAIR_IDS = ["corto", "largo", "rapado", "rulos", "recogido", "ondas", "cresta"] as const;
+export const HAIR_COLOR_IDS = ["negro", "castano-oscuro", "castano-claro", "rubio", "pelirrojo", "gris"] as const;
+export const GLASSES_IDS = ["ninguno", "redondos", "cuadrados", "sol"] as const;
 
 const ids = <T extends { id: string }>(xs: readonly T[]) => xs.map((x) => x.id);
 
@@ -63,7 +75,18 @@ export const PROFILE_PROMPT = `Sos un asesor de imagen amable y respetuoso. Mir�
 - undertone: subtono de piel. calido (tonos dorados o melocotón), frio (rosados o azulados) o neutro. Si la luz no deja ver bien, elegí neutro.
 - skinDepth: clara, media u oscura.
 - bodyType: solo si se ve el cuerpo entero o casi entero. rectangulo (hombros, cintura y cadera parejos), triangulo (cadera más ancha que hombros), triangulo-invertido (hombros más anchos que cadera), ovalo (más volumen en el centro), reloj (cintura marcada). Si no se ve, devolvé null.
-- advice: 2 o 3 frases en español rioplatense, positivas y concretas, sobre qué colores y cortes le favorecen. Nunca hagas comentarios negativos sobre el cuerpo ni sobre el peso.`;
+- advice: 2 o 3 frases en español rioplatense, positivas y concretas, sobre qué colores y cortes le favorecen. Nunca hagas comentarios negativos sobre el cuerpo ni sobre el peso.
+- hair: el peinado que más se parece: corto, largo (por debajo de los hombros), rapado, rulos, recogido (atado), ondas (largo medio ondulado) o cresta.
+- hairColor: negro, castano-oscuro, castano-claro, rubio, pelirrojo o gris.
+- beard: true si tiene barba visible, false si no.
+- glasses: ninguno, redondos, cuadrados o sol (si usa anteojos en las fotos).`;
+
+/** Agrega al pedido cómo se identifica la persona, para que los consejos se adapten. */
+export function profilePromptFor(gender?: string | null): string {
+  const g =
+    gender === "mujer" ? "La persona se identifica como mujer." : gender === "hombre" ? "La persona se identifica como hombre." : "";
+  return g ? `${PROFILE_PROMPT}\n${g} Adaptá los consejos a eso.` : PROFILE_PROMPT;
+}
 
 export const PROFILE_SCHEMA = {
   type: "OBJECT",
@@ -72,8 +95,12 @@ export const PROFILE_SCHEMA = {
     skinDepth: { type: "STRING", enum: ids(SKIN_DEPTHS) },
     bodyType: { type: "STRING", enum: ids(BODY_TYPES), nullable: true },
     advice: { type: "STRING" },
+    hair: { type: "STRING", enum: [...HAIR_IDS] },
+    hairColor: { type: "STRING", enum: [...HAIR_COLOR_IDS] },
+    beard: { type: "BOOLEAN" },
+    glasses: { type: "STRING", enum: [...GLASSES_IDS] },
   },
-  required: ["undertone", "skinDepth", "advice"],
+  required: ["undertone", "skinDepth", "advice", "hair", "hairColor", "beard", "glasses"],
 };
 
 const pick = <T extends string>(value: unknown, allowed: readonly string[]): T | null =>
@@ -111,6 +138,12 @@ export function parseProfile(raw: unknown): ProfileAnalysis | null {
     skinDepth: pick<SkinDepth>(r.skinDepth, ids(SKIN_DEPTHS)),
     bodyType: pick<BodyType>(r.bodyType, ids(BODY_TYPES)),
     advice: typeof r.advice === "string" ? r.advice.trim().slice(0, 600) : "",
+    avatar: {
+      hair: pick(r.hair, HAIR_IDS),
+      hairColor: pick(r.hairColor, HAIR_COLOR_IDS),
+      beard: typeof r.beard === "boolean" ? r.beard : null,
+      glasses: pick(r.glasses, GLASSES_IDS),
+    },
   };
 }
 
@@ -120,7 +153,7 @@ export interface ChooseRequest {
   occasion: string;
   weather: string;
   event?: string;
-  profile: { undertone?: string | null; bodyType?: string | null; styles?: string[] };
+  profile: { undertone?: string | null; bodyType?: string | null; styles?: string[]; gender?: string | null };
   options: { id: string; items: { name: string; category: string; color: string; formality: number; pattern: string }[] }[];
 }
 
@@ -153,7 +186,7 @@ export function choosePrompt(c: ChooseRequest): string {
     .join("\n");
   return `Sos un asesor de moda con buen gusto y hablás en español rioplatense, de forma simple y amable.
 Ocasión: ${c.occasion}${c.event ? ` (evento: "${c.event}")` : ""}. Clima: ${c.weather}.
-Persona: subtono de piel ${c.profile.undertone ?? "sin dato"}, silueta ${c.profile.bodyType ?? "sin dato"}, estilos que le gustan: ${c.profile.styles?.join(", ") || "sin dato"}.
+Persona: ${c.profile.gender === "mujer" ? "mujer, " : c.profile.gender === "hombre" ? "hombre, " : ""}subtono de piel ${c.profile.undertone ?? "sin dato"}, silueta ${c.profile.bodyType ?? "sin dato"}, estilos que le gustan: ${c.profile.styles?.join(", ") || "sin dato"}.
 Opciones (todas con ropa que la persona ya tiene):
 ${opts}
 

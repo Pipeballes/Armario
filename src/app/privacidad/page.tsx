@@ -17,7 +17,7 @@ export default function PrivacidadPage() {
         ← Perfil
       </Link>
       <h1 className="page-title mb-1">Política de privacidad</h1>
-      <p className="mb-4 text-sm text-muted">Última actualización: 24 de noviembre de 2026</p>
+      <p className="mb-4 text-sm text-muted">Última actualización: 24 de noviembre de 2026 (fotos del perfil guardadas)</p>
 
       <p>
         Armario es una app para ordenar tu ropa y armar outfits. Esta página explica, en palabras simples, qué datos
@@ -33,7 +33,8 @@ export default function PrivacidadPage() {
           <strong>Las fotos de tu ropa</strong> y sus datos (tipo, color, estilo, cuándo la usaste).
         </li>
         <li>
-          <strong>Tu perfil</strong>: nombre, subtono y tono de piel, silueta, altura, estilos, fotos de inspiración,
+          <strong>Tu perfil</strong>: nombre, género, subtono y tono de piel, silueta, altura, estilos, las fotos tuyas que
+          subís para el análisis (privadas, podés sacarlas cuando quieras), fotos de inspiración,
           cómo se ve tu avatar, los outfits que marcaste con 👍/👎 y los días que fijaste en el planificador.
         </li>
         <li>
@@ -48,10 +49,6 @@ export default function PrivacidadPage() {
 
       <H>Qué NO guarda</H>
       <ul className="list-disc space-y-1 pl-5">
-        <li>
-          <strong>Las fotos tuyas</strong> que subís para que la IA analice tu tono de piel y tu silueta: se analizan y se
-          descartan. Solo queda el resultado si tocás &quot;Usar estos datos&quot;.
-        </li>
         <li>
           <strong>Tu ubicación exacta</strong>: para el clima se usa una ubicación redondeada (más o menos 1 km), que
           queda solo en tu celular.

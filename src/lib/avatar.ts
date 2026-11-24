@@ -4,6 +4,8 @@ import { colorById, type BodyType } from "./catalog";
 import type { AvatarStyle, Garment, Profile } from "./types";
 
 export interface BodyDims {
+  /** Forma general del cuerpo según el género elegido. */
+  feminine: boolean;
   /** Factor de escala por altura (1 = 1,72 m). */
   scale: number;
   heightM: number;
@@ -23,9 +25,13 @@ const SHAPES: Record<BodyType | "default", [number, number, number]> = {
 };
 
 export function bodyDims(p: Profile): BodyDims {
-  const heightM = p.height && p.height >= 120 && p.height <= 220 ? p.height / 100 : 1.72;
+  const heightM = p.height && p.height >= 120 && p.height <= 220 ? p.height / 100 : p.gender === "mujer" ? 1.64 : 1.72;
   const [shoulder, waist, hip] = SHAPES[p.bodyType ?? "default"];
-  return { scale: heightM / 1.72, heightM, shoulder, waist, hip };
+  const feminine = p.gender === "mujer";
+  // Silueta femenina: hombros un poco más angostos, cintura marcada y cadera más ancha.
+  return feminine
+    ? { feminine, scale: heightM / 1.72, heightM, shoulder: shoulder * 0.9, waist: waist * 0.88, hip: hip * 1.08 }
+    : { feminine, scale: heightM / 1.72, heightM, shoulder, waist, hip };
 }
 
 const SKIN: Record<string, string> = {
@@ -182,5 +188,16 @@ export const HAIR_COLORS: { hex: string; label: string }[] = [
 ];
 
 export function avatarOf(p: Profile): AvatarStyle {
-  return { ...DEFAULT_AVATAR, ...(p.avatar ?? {}) };
+  const base = p.gender === "mujer" ? { ...DEFAULT_AVATAR, hair: "largo" as const } : DEFAULT_AVATAR;
+  return { ...base, ...(p.avatar ?? {}) };
 }
+
+/** Colores de pelo que detecta la IA → color del avatar. */
+export const HAIR_COLOR_BY_ID: Record<string, string> = {
+  negro: "#1f1a17",
+  "castano-oscuro": "#3b2a20",
+  "castano-claro": "#7a5233",
+  rubio: "#d9b46a",
+  pelirrojo: "#a8482c",
+  gris: "#9a9a9a",
+};
