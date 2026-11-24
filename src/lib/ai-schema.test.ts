@@ -9,6 +9,9 @@ describe("parseChoice", () => {
       tip: "Sumá un reloj",
     });
   });
+  it("entiende \"Opción 1\" y números", () => {
+    expect(parseChoice({ order: ["Opción 2", 0], why: "", tip: "" }, ["0", "1", "2"])?.order).toEqual(["2", "0", "1"]);
+  });
   it("si la respuesta no sirve devuelve null", () => {
     expect(parseChoice({ order: ["x"] }, ["1", "2"])).toBeNull();
     expect(parseChoice(null, ["1"])).toBeNull();

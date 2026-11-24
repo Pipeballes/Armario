@@ -165,7 +165,14 @@ En "tip" dá un consejo concreto para completar el look (cómo llevarla, qué ac
 export function parseChoice(raw: unknown, ids: string[]): ChoiceResult | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
-  const order = Array.isArray(r.order) ? r.order.map(String).filter((x) => ids.includes(x)) : [];
+  // La IA a veces contesta "Opción 1" o un número en vez del id exacto.
+  const norm = (x: unknown): string | null => {
+    const str = String(x).trim();
+    if (ids.includes(str)) return str;
+    const num = /\d+/.exec(str)?.[0];
+    return num && ids.includes(num) ? num : null;
+  };
+  const order = Array.isArray(r.order) ? r.order.map(norm).filter((x): x is string => x !== null) : [];
   const unique = [...new Set(order)];
   if (unique.length === 0) return null;
   // Las que la IA no nombró van al final, en el orden original.

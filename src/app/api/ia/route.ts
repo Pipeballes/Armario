@@ -91,7 +91,10 @@ export async function POST(request: Request) {
     const r = await askGemini(apiKey, [{ text: choosePrompt(c) }], CHOOSE_SCHEMA);
     if ("error" in r) return r.error;
     const choice = parseChoice(r.data, c.options.map((o) => o.id));
-    if (!choice) return fail(502, "La IA no pudo decidir. Probá de nuevo.");
+    if (!choice) {
+      console.error("Respuesta de elección no válida", JSON.stringify(r.data).slice(0, 300));
+      return fail(502, "La IA no pudo decidir. Probá de nuevo.");
+    }
     return Response.json(choice);
   }
 
