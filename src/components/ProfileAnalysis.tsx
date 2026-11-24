@@ -152,10 +152,18 @@ export default function ProfileAnalysis() {
       {!result && (
         <>
           {photos.length === 0 ? (
-            <label className={`btn-primary w-full cursor-pointer ${saving ? "pointer-events-none opacity-60" : ""}`}>
-              {saving ? "Guardando…" : "📷 Elegir fotos"}
-              {fileInput}
-            </label>
+            <>
+              {analyzed && (
+                <p className="mb-2 rounded-xl bg-surface-2 p-3 text-sm">
+                  Las fotos que usaste antes no se guardaban. Subilas de nuevo y van a quedar acá, con la opción de sumar
+                  más.
+                </p>
+              )}
+              <label className={`btn-primary w-full cursor-pointer ${saving ? "pointer-events-none opacity-60" : ""}`}>
+                {saving ? "Guardando…" : "📷 Elegir fotos"}
+                {fileInput}
+              </label>
+            </>
           ) : (
             <div className="rounded-xl bg-surface-2 p-3">
               <p className="mb-2 text-sm font-semibold">
