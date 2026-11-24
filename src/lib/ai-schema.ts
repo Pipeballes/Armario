@@ -130,6 +130,12 @@ const pick = <T extends string>(value: unknown, allowed: readonly string[]): T |
   typeof value === "string" && allowed.includes(value) ? (value as T) : null;
 
 /** Valida la respuesta de la IA para una prenda. Devuelve null si no sirve. */
+/** Versión simple del formato (sin listas largas), por si el modelo rechaza la completa. */
+export const GARMENT_SCHEMA_SIMPLE = {
+  ...GARMENT_SCHEMA,
+  properties: { ...GARMENT_SCHEMA.properties, kind: { type: "STRING" }, sport: { type: "STRING" } },
+};
+
 export function parseGarment(raw: unknown): GarmentAnalysis | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;

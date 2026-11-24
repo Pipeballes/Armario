@@ -6,6 +6,7 @@ import {
   CHOOSE_SCHEMA,
   GARMENT_PROMPT,
   GARMENT_SCHEMA,
+  GARMENT_SCHEMA_SIMPLE,
   PROFILE_SCHEMA,
   profilePromptFor,
   choosePrompt,
@@ -26,6 +27,13 @@ function garmentSides(raw: unknown, n: number): string {
   return (list.length === n ? list : SIDES.slice(0, n)).join(", ");
 }
 
+/** Para que la IA nombre la prenda como la usa esa persona (ej: "bombacha" o "calzoncillo"). */
+function garmentGenderHint(gender: unknown): string {
+  if (gender === "hombre") return "La ropa es de un hombre: elegí kind entre prendas de hombre o unisex.\n\n";
+  if (gender === "mujer") return "La ropa es de una mujer: elegí kind entre prendas de mujer o unisex.\n\n";
+  return "";
+}
+
 function fail(status: number, message: string) {
   return Response.json({ error: message }, { status });
 }
@@ -42,7 +50,12 @@ async function userFromToken(token: string | null): Promise<string | null> {
 type Part = { text: string } | { inline_data: { mime_type: string; data: string } };
 
 /** Llama a Gemini probando modelos de respaldo si uno está saturado. Devuelve el JSON o un error listo para mandar. */
-async function askGemini(apiKey: string, parts: Part[], schema: object): Promise<{ data: unknown } | { error: Response }> {
+async function askGemini(
+  apiKey: string,
+  parts: Part[],
+  schema: object,
+  fallbackSchema?: object,
+): Promise<{ data: unknown } | { error: Response }> {
   const payload = JSON.stringify({
     contents: [{ parts }],
     generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.2 },
@@ -64,6 +77,8 @@ async function askGemini(apiKey: string, parts: Part[], schema: object): Promise
   if (res.status === 429) return { error: fail(429, "Se usó todo el cupo gratis de la IA por ahora. Probá en un rato.") };
   if (!res.ok) {
     console.error("Gemini error", res.status, (await res.text().catch(() => "")).slice(0, 500));
+    // Si el formato pedido es demasiado complejo para el modelo, se prueba con uno más simple.
+    if (res.status === 400 && fallbackSchema) return askGemini(apiKey, parts, fallbackSchema);
     return { error: fail(502, "La IA no respondió. Probá de nuevo.") };
   }
   const json = await res.json();
@@ -123,14 +138,20 @@ export async function POST(request: Request) {
   const isGarment = body.kind === "prenda";
   parts.push({
     text: isGarment
-      ? parts.length > 1
+      ? garmentGenderHint(body.gender) +
+        (parts.length > 1
         ? `${GARMENT_PROMPT}\n\nTe paso ${parts.length} fotos de la MISMA prenda, en este orden: ${garmentSides(body.sides, parts.length)}. Si atrás tiene un estampado o logo grande, contalo como estampado. Si hay una foto de la etiqueta, leé el talle de ahí.`
-        : GARMENT_PROMPT
+          : GARMENT_PROMPT)
       : parts.length > 1
         ? `${profilePromptFor(body.gender)}\n\nTe paso ${parts.length} fotos de la MISMA persona, con distintos ángulos y luces. Combiná lo que ves en todas para dar una sola respuesta. Si la luz de alguna cambia el color de la piel, confiá más en las que tienen luz natural.`
         : profilePromptFor(body.gender),
   });
-  const r = await askGemini(apiKey, parts, isGarment ? GARMENT_SCHEMA : PROFILE_SCHEMA);
+  const r = await askGemini(
+    apiKey,
+    parts,
+    isGarment ? GARMENT_SCHEMA : PROFILE_SCHEMA,
+    isGarment ? GARMENT_SCHEMA_SIMPLE : undefined,
+  );
   if ("error" in r) return r.error;
   const result = isGarment ? parseGarment(r.data) : parseProfile(r.data);
   if (!result) return fail(502, "La IA no entendió la foto. Probá con otra.");

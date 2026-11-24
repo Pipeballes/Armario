@@ -5,7 +5,7 @@
 
 import { ContactShadows, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { HAIR_WITH_BACK, cameraFor, glassesById, type BodyDims, type GlassesDef, type Look, type View } from "@/lib/avatar";
@@ -624,6 +624,91 @@ function Hair({ kind, color, backOnly = false }: { kind: AvatarStyle["hair"]; co
   );
 }
 
+/** Color de la tela: promedio de los costados del torso en la foto (sin el estampado del centro). */
+function fabricColor(img: CanvasImageSource): string | null {
+  try {
+    const c = document.createElement("canvas");
+    c.width = c.height = 40;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, 40, 40);
+    let r = 0, g = 0, b = 0, n = 0;
+    for (const x0 of [13, 25]) {
+      const d = ctx.getImageData(x0, 15, 2, 16).data;
+      for (let i = 0; i < d.length; i += 4) {
+        r += d[i];
+        g += d[i + 1];
+        b += d[i + 2];
+        n++;
+      }
+    }
+    if (!n) return null;
+    return `rgb(${Math.round(r / n)}, ${Math.round(g / n)}, ${Math.round(b / n)})`;
+  } catch {
+    return null; // la foto no deja leer sus colores
+  }
+}
+
+/** Carga una foto como textura (sin bloquear la escena) y calcula el color de la tela. */
+function usePhotoTexture(src: string | undefined): { tex: THREE.Texture; fabric: string | null } | null {
+  const [tex, setTex] = useState<{ tex: THREE.Texture; fabric: string | null } | null>(null);
+  useEffect(() => {
+    if (!src) return;
+    let alive = true;
+    let loaded: THREE.Texture | null = null;
+    new THREE.TextureLoader().load(
+      src,
+      (t) => {
+        t.colorSpace = THREE.SRGBColorSpace;
+        // Se usa la parte del pecho de la foto (donde suele estar el estampado).
+        t.repeat.set(0.4, 0.44);
+        t.offset.set(0.3, 0.3);
+        loaded = t;
+        if (alive) setTex({ tex: t, fabric: fabricColor(t.image as CanvasImageSource) });
+        else t.dispose();
+      },
+      undefined,
+      () => {},
+    );
+    return () => {
+      alive = false;
+      loaded?.dispose();
+      setTex(null);
+    };
+  }, [src]);
+  return src ? tex : null;
+}
+
+/** El estampado de la remera: la foto pegada sobre el pecho (y la de atrás en la espalda). */
+function PrintPanel({ d, tex, back = false }: { d: BodyDims; tex: THREE.Texture | undefined; back?: boolean }) {
+  const geom = useMemo(() => {
+    // Perfil del torso con más puntos para que la foto no se deforme.
+    const base = torsoProfile(d, 0.017, 0.92, 1.47);
+    const at = (y: number) => {
+      for (let i = 1; i < base.length; i++) {
+        const [r0, y0] = base[i - 1];
+        const [r1, y1] = base[i];
+        if (y <= y1) return r0 + ((r1 - r0) * (y - y0)) / (y1 - y0);
+      }
+      return base[base.length - 1][0];
+    };
+    const pts: THREE.Vector2[] = [];
+    for (let k = 0; k <= 12; k++) {
+      const y = 1.0 + (k / 12) * 0.4;
+      pts.push(new THREE.Vector2(at(y), y));
+    }
+    const span = 2.1;
+    return new THREE.LatheGeometry(pts, 24, (back ? Math.PI : 0) - span / 2, span);
+  }, [d, back]);
+  useEffect(() => () => geom.dispose(), [geom]);
+  if (!tex) return null;
+  return (
+    <mesh geometry={geom} scale={[1, 1, 0.62]}>
+      <meshToonMaterial map={tex} gradientMap={getToonGradient()} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
 function torsoProfile(d: BodyDims, inflate = 0, from = 0.9, to = 1.49): [number, number][] {
   const chest = Math.max(d.waist, d.shoulder * (d.feminine ? 0.95 : 0.85));
   const pts: [number, number][] = [
@@ -661,6 +746,10 @@ function Body({ d, skin, look, style }: { d: BodyDims; skin: string; look: Look;
 
   // Si no elegiste nada, el avatar lleva una remera y un short básicos grises.
   const top = look.top ?? { color: "#d6d0c6", striped: false, sleeves: "short" as const, dress: "none" as const };
+  // Estampado real: la foto de la prenda en el pecho y la espalda; el resto toma el color de la tela.
+  const printFront = usePhotoTexture(look.top?.print?.front);
+  const printBack = usePhotoTexture(look.top?.print?.back);
+  const topColor = printFront?.fabric ?? top.color;
   const bottom =
     look.bottom ?? (look.top && look.top.dress !== "none" ? null : { color: "#8f8a82", striped: false, kind: "shorts" as const });
   const outer = look.outerwear;
@@ -716,11 +805,11 @@ function Body({ d, skin, look, style }: { d: BodyDims; skin: string; look: Look;
             {(top || outer) && (
               <>
                 <Limb a={a.shoulder} b={sleeveLen === "long" ? a.elbow : lerp3(a.shoulder, a.elbow, 0.55)} r={outer ? 0.062 : 0.054}>
-                  <Mat color={outer?.color ?? top!.color} striped={outer ? outer.striped : top!.striped} />
+                  <Mat color={outer?.color ?? topColor} striped={outer ? outer.striped : top!.striped} />
                 </Limb>
                 {sleeveLen === "long" && (
                   <Limb a={a.elbow} b={lerp3(a.elbow, a.wrist, 0.92)} r={outer ? 0.052 : 0.045}>
-                    <Mat color={outer?.color ?? top!.color} striped={outer ? outer.striped : top!.striped} />
+                    <Mat color={outer?.color ?? topColor} striped={outer ? outer.striped : top!.striped} />
                   </Limb>
                 )}
               </>
@@ -758,9 +847,11 @@ function Body({ d, skin, look, style }: { d: BodyDims; skin: string; look: Look;
       {/* Parte de arriba / vestido */}
       {top && (
         <Lathe points={torsoProfile(d, 0.012, top.dress === "none" ? 0.92 : 0.98, 1.47)}>
-          <Mat color={top.color} striped={top.striped} />
+          <Mat color={topColor} striped={top.striped} />
         </Lathe>
       )}
+      {printFront && !outer && <PrintPanel d={d} tex={printFront.tex} />}
+      {printBack && !outer && <PrintPanel d={d} tex={printBack.tex} back />}
       {top && top.dress !== "none" && (
         <Lathe
           points={[
@@ -770,7 +861,7 @@ function Body({ d, skin, look, style }: { d: BodyDims; skin: string; look: Look;
           ]}
           flat={0.75}
         >
-          <Mat color={top.color} striped={top.striped} />
+          <Mat color={topColor} striped={top.striped} />
         </Lathe>
       )}
 

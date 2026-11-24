@@ -52,13 +52,15 @@ export interface KindDef {
   slot?: KindSlot;
   /** Pistas para dibujarla en el avatar. */
   look?: "corta" | "larga" | "pollera" | "botas" | "gorro" | "bufanda";
+  /** Sección donde se muestra (para ordenar las partes del pijama). */
+  group?: string;
 }
 
 const H = "hombre" as const;
 const M = "mujer" as const;
 const OTHER: KindDef = { id: "otro", label: "Otro", slot: null };
 
-const UNDERWEAR: KindDef[] = [
+const UNDERWEAR_RAW: KindDef[] = [
   { id: "calzon", label: "Calzoncillo", labelM: "Bombacha", slot: "bottom" },
   { id: "boxer", label: "Bóxer", labelM: "Culotte", slot: "bottom" },
   { id: "tanga", label: "Tanga o colaless", only: M, slot: "bottom" },
@@ -71,6 +73,9 @@ const UNDERWEAR: KindDef[] = [
   { id: "soquetes", label: "Soquetes", slot: null },
   { id: "medias-cancan", label: "Medias de nylon o cancan", only: M, slot: null },
 ];
+
+const SOCKS = ["medias", "soquetes", "medias-cancan"];
+const UNDERWEAR: KindDef[] = UNDERWEAR_RAW.map((k) => ({ ...k, group: SOCKS.includes(k.id) ? "Medias" : "Ropa interior" }));
 
 /**
  * Qué tipo de prenda es dentro de cada categoría, con lo que usan hombres y mujeres
@@ -197,18 +202,28 @@ export const KINDS: Record<Category, KindDef[]> = {
     OTHER,
   ],
   pijama: [
-    { id: "remera", label: "Remera", slot: "top", look: "corta" },
-    { id: "remera-manga-larga", label: "Remera manga larga", slot: "top", look: "larga" },
-    { id: "short", label: "Short", slot: "bottom", look: "corta" },
-    { id: "pantalon", label: "Pantalón", slot: "bottom" },
-    { id: "buzo", label: "Buzo", slot: "outerwear" },
-    { id: "bata", label: "Bata", slot: "outerwear" },
-    { id: "enterito-pijama", label: "Enterito o mameluco", slot: "top", look: "larga" },
-    { id: "camison", label: "Camisón", only: M, slot: "top", look: "corta" },
-    { id: "babydoll", label: "Babydoll", only: M, slot: "top", look: "corta" },
+    { id: "remera", label: "Remera", slot: "top", look: "corta", group: "Parte de arriba" },
+    { id: "remera-manga-larga", label: "Remera manga larga", slot: "top", look: "larga", group: "Parte de arriba" },
+    { id: "musculosa-pijama", label: "Musculosa", slot: "top", look: "corta", group: "Parte de arriba" },
+    { id: "camisa-pijama", label: "Camisa de pijama", slot: "top", look: "larga", group: "Parte de arriba" },
+    { id: "top-pijama", label: "Top", only: M, slot: "top", look: "corta", group: "Parte de arriba" },
+    { id: "short", label: "Short", slot: "bottom", look: "corta", group: "Parte de abajo" },
+    { id: "pantalon", label: "Pantalón", slot: "bottom", group: "Parte de abajo" },
+    { id: "bermuda-pijama", label: "Bermuda", only: H, slot: "bottom", look: "corta", group: "Parte de abajo" },
+    { id: "calza-pijama", label: "Calza", only: M, slot: "bottom", group: "Parte de abajo" },
+    { id: "enterito-pijama", label: "Enterito o mameluco", slot: "top", look: "larga", group: "Enterito" },
+    { id: "camison", label: "Camisón", only: M, slot: "top", look: "corta", group: "Enterito" },
+    { id: "babydoll", label: "Babydoll", only: M, slot: "top", look: "corta", group: "Enterito" },
+    { id: "buzo", label: "Buzo", slot: "outerwear", group: "Para abrigarse" },
+    { id: "bata", label: "Bata", slot: "outerwear", group: "Para abrigarse" },
+    { id: "kimono-pijama", label: "Kimono", only: M, slot: "outerwear", group: "Para abrigarse" },
     ...UNDERWEAR,
-    { id: "accesorio", label: "Accesorio (antifaz, gorro…)", slot: "accessory" },
-    OTHER,
+    { id: "pantuflas", label: "Pantuflas", slot: null, group: "Calzado" },
+    { id: "ojotas-pijama", label: "Ojotas de casa", slot: null, group: "Calzado" },
+    { id: "accesorio", label: "Antifaz", slot: "accessory", group: "Accesorios" },
+    { id: "gorro-dormir", label: "Gorro para dormir", slot: "accessory", group: "Accesorios" },
+    { id: "accesorio-otro", label: "Otro accesorio", slot: "accessory", group: "Accesorios" },
+    { ...OTHER, group: "Otra cosa" },
   ],
   interior: [...UNDERWEAR, OTHER],
   malla: [
@@ -231,6 +246,18 @@ export function kindsFor(category: Category, gender: string | null | undefined):
 }
 
 /** Nombre según el género: "Calzoncillo" (hombre), "Bombacha" (mujer), "Calzoncillo / Bombacha" (otro). */
+/** Agrupa los tipos por sección (si tienen), manteniendo el orden. */
+export function groupKinds(kinds: KindDef[]): { group: string | null; kinds: KindDef[] }[] {
+  const out: { group: string | null; kinds: KindDef[] }[] = [];
+  for (const k of kinds) {
+    const g = k.group ?? null;
+    const last = out.find((x) => x.group === g);
+    if (last) last.kinds.push(k);
+    else out.push({ group: g, kinds: [k] });
+  }
+  return out;
+}
+
 export function kindLabelFor(k: KindDef, gender: string | null | undefined): string {
   if (!k.labelM) return k.label;
   if (isH(gender)) return k.label;

@@ -8,6 +8,7 @@ import {
   SPECIAL_CATEGORIES,
   categoriesFor,
   categoryView,
+  groupKinds,
   kindLabelFor,
   SPORTS,
   kindById,
@@ -106,6 +107,9 @@ export default function GarmentForm({
   // Foto original y con fondo limpio de cada lado, para poder elegir.
   const [versions, setVersions] = useState<Partial<Record<Side, { original: string; clean: string | null }>>>({});
   const [ai, setAi] = useState<"idle" | "working" | "done" | "error">("idle");
+  const [aiError, setAiError] = useState<string | null>(null);
+  // Lo que completó la IA, para mostrarlo en una línea.
+  const [aiFilled, setAiFilled] = useState<string[]>([]);
   const { account, profile } = useArmario();
   const frontRef = useRef<HTMLInputElement>(null);
   const backRef = useRef<HTMLInputElement>(null);
@@ -127,15 +131,34 @@ export default function GarmentForm({
     if (!account || !next.photo) return;
     setAi("working");
     try {
-      const { size, ...r } = await analyzeGarment(photosFor(next));
+      setAiError(null);
+      const { size, ...r } = await analyzeGarment(photosFor(next), profile.gender);
       // Si la IA eligió un tipo que no corresponde a tu género (o a esa categoría), se deja para que lo elijas vos.
       if (!kindsFor(r.category, profile.gender).some((k) => k.id === r.kind)) r.kind = undefined;
       setForm((f) =>
         onlySize ? { ...f, size: f.size || size } : { ...f, ...r, name: f.name || r.name, size: f.size || size },
       );
+      if (!onlySize) {
+        const cat = categoryView(r.category, profile.gender);
+        const k = kindById(r.category, r.kind);
+        setAiFilled(
+          [
+            k ? kindLabelFor(k, profile.gender) : cat.label,
+            COLORS.find((c) => c.id === r.color)?.label,
+            r.pattern === "estampado" ? "Estampada" : "Lisa",
+            STYLES.find((x) => x.id === r.styles[0])?.label,
+            WARMTH.find((w) => w.id === r.warmth)?.label,
+            size ? `Talle ${size}` : undefined,
+          ].filter((x): x is string => Boolean(x)),
+        );
+      }
       setAi("done");
     } catch (e) {
-      setAi(e instanceof AiUnavailable ? (onlySize ? "done" : "idle") : "error");
+      if (e instanceof AiUnavailable) setAi(onlySize ? "done" : "idle");
+      else {
+        setAiError(e instanceof Error ? e.message : null);
+        setAi("error");
+      }
     }
   }
 
@@ -325,12 +348,29 @@ export default function GarmentForm({
         <p className="card mb-6 animate-pulse bg-accent-soft p-3 text-sm">✨ La IA está mirando la prenda…</p>
       )}
       {ai === "done" && (
-        <p className="card mb-6 bg-accent-soft p-3 text-sm">
-          ✨ La IA completó los datos. Revisalos y corregí lo que haga falta.
-        </p>
+        <div className="card mb-6 bg-accent-soft p-3 text-sm">
+          <p className="font-semibold">✨ La IA completó los datos</p>
+          {aiFilled.length > 0 && <p className="mt-0.5">{aiFilled.join(" · ")}</p>}
+          <p className="mt-1 text-xs text-muted">Revisalos abajo y tocá lo que no esté bien.</p>
+        </div>
       )}
       {ai === "error" && (
-        <p className="card mb-6 p-3 text-sm text-muted">No pude analizar la foto con IA. Completalo a mano.</p>
+        <div className="card mb-6 p-3 text-sm">
+          <p>No pude analizar la foto con IA{aiError ? `: ${aiError}` : "."}</p>
+          <button type="button" className="mt-2 text-accent underline" onClick={() => analyze(form)}>
+            ✨ Probar de nuevo
+          </button>
+        </div>
+      )}
+      {ai === "idle" && account && form.photo && (
+        <button type="button" className="btn-ghost mb-6 w-full" onClick={() => analyze(form)}>
+          ✨ Que la IA complete los datos
+        </button>
+      )}
+      {!account && (
+        <p className="card mb-6 p-3 text-sm text-muted">
+          💡 Si entrás con tu mail (en Perfil), la IA te completa tipo, color, estilo y talle sola.
+        </p>
       )}
 
       <Section title="Categoría">
@@ -361,13 +401,18 @@ export default function GarmentForm({
 
       <div id="tipo">
         <Section title={KIND_TITLE[form.category]}>
-          <div className="flex flex-wrap gap-2">
-            {kindsFor(form.category, profile.gender).map((k) => (
-              <Chip key={k.id} pressed={form.kind === k.id} onClick={() => update("kind", k.id)}>
-                {k.label}
-              </Chip>
-            ))}
-          </div>
+          {groupKinds(kindsFor(form.category, profile.gender)).map(({ group, kinds }) => (
+            <div key={group ?? "todos"} className={group ? "mb-3" : ""}>
+              {group && <p className="mb-1.5 text-xs font-semibold tracking-wide text-muted uppercase">{group}</p>}
+              <div className="flex flex-wrap gap-2">
+                {kinds.map((k) => (
+                  <Chip key={k.id} pressed={form.kind === k.id} onClick={() => update("kind", k.id)}>
+                    {k.label}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+          ))}
           {form.kind === "otro" && (
             <input
               className="input mt-2"

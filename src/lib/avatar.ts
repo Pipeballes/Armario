@@ -82,7 +82,14 @@ export function selectionFrom(items: Garment[]): Selection {
 
 /** Cómo dibujar cada prenda en el avatar. */
 export interface Look {
-  top: { color: string; striped: boolean; sleeves: "short" | "long"; dress: "none" | "short" | "long" } | null;
+  top: {
+    color: string;
+    striped: boolean;
+    sleeves: "short" | "long";
+    dress: "none" | "short" | "long";
+    /** Si es estampada: las fotos de la prenda, para que se vea el estampado real. */
+    print?: { front: string; back?: string };
+  } | null;
   bottom: { color: string; striped: boolean; kind: "pants" | "shorts" | "skirt" } | null;
   shoes: { color: string; boots: boolean } | null;
   outerwear: { color: string; striped: boolean } | null;
@@ -105,7 +112,9 @@ export function lookFrom(sel: Selection, garments: Garment[]): Look {
     top: top
       ? {
           color: hex(top),
-          striped: top.pattern === "estampado",
+          // Con foto se ve el estampado real; sin foto, se dibujan rayas.
+          striped: top.pattern === "estampado" && !top.photo,
+          print: top.pattern === "estampado" && top.photo ? { front: top.photo, back: top.photoBack } : undefined,
           sleeves:
             look(top) === "corta" || (!look(top) && (top.warmth === "light" || /musculosa|remera|top\b/.test(name(top))))
               ? "short"
