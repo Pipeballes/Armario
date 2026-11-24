@@ -7,6 +7,9 @@ import {
   GARMENT_PROMPT,
   GARMENT_SCHEMA,
   GARMENT_SCHEMA_SIMPLE,
+  FIT_PROMPT,
+  FIT_SCHEMA,
+  parseFit,
   PROFILE_SCHEMA,
   profilePromptFor,
   choosePrompt,
@@ -119,6 +122,21 @@ export async function POST(request: Request) {
       return fail(502, "La IA no pudo decidir. Probá de nuevo.");
     }
     return Response.json(choice);
+  }
+
+  if (body.kind === "ajuste") {
+    const img = Array.isArray(body.images) ? body.images[0] : undefined;
+    const m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(typeof img === "string" ? img : "");
+    if (!m) return fail(400, "La foto no es válida.");
+    if (m[2].length > MAX_TOTAL_CHARS) return fail(413, "La foto es muy pesada.");
+    const r = await askGemini(apiKey, [{ inline_data: { mime_type: m[1], data: m[2] } }, { text: FIT_PROMPT }], FIT_SCHEMA);
+    if ("error" in r) return r.error;
+    const fit = parseFit(r.data);
+    if (!fit) {
+      console.error("Ajuste no válido", JSON.stringify(r.data).slice(0, 300));
+      return fail(502, "La IA no pudo ubicar la prenda en la foto.");
+    }
+    return Response.json(fit);
   }
 
   if (body.kind !== "prenda" && body.kind !== "perfil") return fail(400, "Tipo de análisis inválido.");

@@ -25,6 +25,8 @@ export interface Garment {
   kind?: string;
   /** Si el tipo es "otro": qué es (escrito). */
   kindDetail?: string;
+  /** Cómo está la prenda en cada foto, para vestir bien el avatar (lo calcula la IA). */
+  fit?: { front?: GarmentFit; back?: GarmentFit };
   name: string;
   category: Category;
   color: string;
@@ -66,6 +68,16 @@ export interface Profile {
   weekPlan?: Record<string, string[]>;
   /** Outfits que marcaste con 👍 / 👎 (claves de ids ordenados). */
   feedback?: { liked: string[]; disliked: string[] };
+}
+
+/** Dónde está la prenda en la foto, cuánto está girada y de qué color es la tela. */
+export interface GarmentFit {
+  /** Grados que está girada (positivo = en sentido horario). */
+  angle: number;
+  /** Caja de la prenda entera en la foto: [x0, y0, x1, y1] de 0 a 1. */
+  box: [number, number, number, number];
+  /** Color principal de la tela (#rrggbb). */
+  fabric: string;
 }
 
 export type HairId =

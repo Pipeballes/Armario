@@ -9,7 +9,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { HAIR_WITH_BACK, cameraFor, glassesById, type BodyDims, type GlassesDef, type Look, type View } from "@/lib/avatar";
-import type { AvatarStyle } from "@/lib/types";
+import { buildShirtTexture } from "@/lib/shirt-texture";
+import type { AvatarStyle, GarmentFit } from "@/lib/types";
 
 type V3 = [number, number, number];
 
@@ -625,88 +626,39 @@ function Hair({ kind, color, backOnly = false }: { kind: AvatarStyle["hair"]; co
 }
 
 /**
- * Mira la foto de la prenda: dónde está (para recortar justo el pecho, aunque la prenda no esté
- * centrada) y de qué color es la tela (cerca del ruedo, donde casi nunca hay estampado).
+ * La prenda real para el torso: la foto enderezada y recortada (sin mangas ni fondo) y el color de la tela.
+ * Se arma en el navegador a partir de la foto y del ajuste de la IA.
  */
-function analyzePhoto(img: CanvasImageSource): { box: [number, number, number, number]; fabric: string | null } {
-  const full: [number, number, number, number] = [0, 0, 1, 1];
-  try {
-    const N = 64;
-    const c = document.createElement("canvas");
-    c.width = c.height = N;
-    const ctx = c.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return { box: full, fabric: null };
-    ctx.drawImage(img, 0, 0, N, N);
-    const d = ctx.getImageData(0, 0, N, N).data;
-    const px = (x: number, y: number) => {
-      const i = (y * N + x) * 4;
-      return [d[i], d[i + 1], d[i + 2]];
-    };
-    // Fondo: promedio de las 4 esquinas.
-    const corners = [px(1, 1), px(N - 2, 1), px(1, N - 2), px(N - 2, N - 2)];
-    const bg = [0, 1, 2].map((k) => corners.reduce((s, c) => s + c[k], 0) / 4);
-    let x0 = N, y0 = N, x1 = -1, y1 = -1;
-    for (let y = 0; y < N; y++)
-      for (let x = 0; x < N; x++) {
-        const [r, g, b] = px(x, y);
-        if (Math.abs(r - bg[0]) + Math.abs(g - bg[1]) + Math.abs(b - bg[2]) > 60) {
-          if (x < x0) x0 = x;
-          if (x > x1) x1 = x;
-          if (y < y0) y0 = y;
-          if (y > y1) y1 = y;
-        }
-      }
-    const box: [number, number, number, number] =
-      x1 - x0 > N * 0.25 && y1 - y0 > N * 0.25 ? [x0 / N, y0 / N, (x1 + 1) / N, (y1 + 1) / N] : full;
-    // Tela: franja de abajo, en el centro de la prenda.
-    let r = 0, g = 0, b = 0, n = 0;
-    const [bx0, by0, bx1, by1] = box.map((v) => v * N);
-    for (let y = Math.floor(by0 + (by1 - by0) * 0.8); y < by0 + (by1 - by0) * 0.92; y++)
-      for (let x = Math.floor(bx0 + (bx1 - bx0) * 0.35); x < bx0 + (bx1 - bx0) * 0.65; x++) {
-        const p = px(x, y);
-        r += p[0];
-        g += p[1];
-        b += p[2];
-        n++;
-      }
-    return { box, fabric: n ? `rgb(${Math.round(r / n)}, ${Math.round(g / n)}, ${Math.round(b / n)})` : null };
-  } catch {
-    return { box: full, fabric: null }; // la foto no deja leer sus colores
-  }
-}
-
-/** Carga una foto como textura (sin bloquear la escena), recortada al pecho de la prenda. */
-function usePhotoTexture(src: string | undefined): { tex: THREE.Texture; fabric: string | null } | null {
-  const [tex, setTex] = useState<{ tex: THREE.Texture; fabric: string | null } | null>(null);
+function useShirtTexture(
+  src: string | undefined,
+  fit: GarmentFit | undefined,
+  hint?: string,
+): { tex: THREE.Texture; fabric: string } | null {
+  const [state, setState] = useState<{ key: string; tex: THREE.Texture; fabric: string } | null>(null);
+  const key = src ? `${src}|${fit ? JSON.stringify(fit) : ""}|${hint ?? ""}` : "";
   useEffect(() => {
     if (!src) return;
     let alive = true;
-    let loaded: THREE.Texture | null = null;
-    new THREE.TextureLoader().load(
-      src,
-      (t) => {
+    let made: THREE.Texture | null = null;
+    buildShirtTexture(src, fit, hint)
+      .then((r) => {
+        if (!r) return;
+        const t = new THREE.CanvasTexture(r.canvas);
         t.colorSpace = THREE.SRGBColorSpace;
-        const { box, fabric } = analyzePhoto(t.image as CanvasImageSource);
-        const [bx0, by0, bx1, by1] = box;
-        const bw = bx1 - bx0;
-        const bh = by1 - by0;
-        // Pecho de una remera estirada: el centro (sin mangas) y de arriba hasta un poco más abajo de la mitad.
-        t.repeat.set(bw * 0.5, bh * 0.62);
-        t.offset.set(bx0 + bw * 0.25, 1 - (by0 + bh * 0.8));
-        loaded = t;
-        if (alive) setTex({ tex: t, fabric });
+        t.anisotropy = 4;
+        made = t;
+        if (alive) setState({ key, tex: t, fabric: r.fabric });
         else t.dispose();
-      },
-      undefined,
-      () => {},
-    );
+      })
+      .catch(() => {});
     return () => {
       alive = false;
-      loaded?.dispose();
-      setTex(null);
+      made?.dispose();
     };
-  }, [src]);
-  return src ? tex : null;
+    // fit va dentro de key.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return state && state.key === key ? state : null;
 }
 
 /** El estampado de la remera: la foto pegada sobre el pecho (y la de atrás en la espalda). */
@@ -723,12 +675,25 @@ function PrintPanel({ d, tex, back = false }: { d: BodyDims; tex: THREE.Texture 
       return base[base.length - 1][0];
     };
     const pts: THREE.Vector2[] = [];
-    for (let k = 0; k <= 14; k++) {
-      const y = 0.9 + (k / 14) * 0.52;
+    for (let k = 0; k <= 16; k++) {
+      const y = PANEL_BOTTOM + (k / 16) * (PANEL_TOP - PANEL_BOTTOM);
       pts.push(new THREE.Vector2(at(y), y));
     }
-    const span = 2.1;
-    return new THREE.LatheGeometry(pts, 24, (back ? Math.PI : 0) - span / 2, span);
+    // Cubre todo el frente (o la espalda) del torso.
+    const span = 2.7;
+    const g = new THREE.LatheGeometry(pts, 32, (back ? Math.PI : 0) - span / 2, span);
+    // Se pega la foto "de frente" (por posición, no por ángulo): así no se estira hacia los costados.
+    const pos = g.attributes.position;
+    const uv = g.attributes.uv;
+    const half = Math.sin(span / 2);
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i);
+      const r = at(y) || 1;
+      const u = 0.5 + (back ? -1 : 1) * (pos.getX(i) / (2 * r * half));
+      uv.setX(i, Math.min(1, Math.max(0, u)));
+    }
+    uv.needsUpdate = true;
+    return g;
   }, [d, back]);
   useEffect(() => () => geom.dispose(), [geom]);
   if (!tex) return null;
@@ -740,6 +705,9 @@ function PrintPanel({ d, tex, back = false }: { d: BodyDims; tex: THREE.Texture 
 }
 
 const SHIRT_INFLATE = 0.024;
+// Alto que cubre la foto de la prenda: del ruedo a los hombros.
+const PANEL_BOTTOM = 0.85;
+const PANEL_TOP = 1.45;
 
 /** Remera: un poco más holgada que el cuerpo y larga hasta la cadera, cayendo sobre el pantalón. */
 function topProfile(d: BodyDims, inflate = SHIRT_INFLATE): [number, number][] {
@@ -784,9 +752,9 @@ function Body({ d, skin, look, style }: { d: BodyDims; skin: string; look: Look;
   // Si no elegiste nada, el avatar lleva una remera y un short básicos grises.
   const top = look.top ?? { color: "#d6d0c6", striped: false, sleeves: "short" as const, dress: "none" as const };
   // Estampado real: la foto de la prenda en el pecho y la espalda; el resto toma el color de la tela.
-  const printFront = usePhotoTexture(look.top?.print?.front);
-  const printBack = usePhotoTexture(look.top?.print?.back);
-  const topColor = printFront?.fabric ?? top.color;
+  const printFront = useShirtTexture(look.top?.print?.front, look.top?.print?.fitFront, look.top?.color);
+  const printBack = useShirtTexture(look.top?.print?.back, look.top?.print?.fitBack, look.top?.color);
+  const topColor = printFront?.fabric ?? look.top?.print?.fitFront?.fabric ?? top.color;
   const bottom =
     look.bottom ?? (look.top && look.top.dress !== "none" ? null : { color: "#8f8a82", striped: false, kind: "shorts" as const });
   const outer = look.outerwear;

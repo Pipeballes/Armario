@@ -21,7 +21,7 @@ import {
   type StyleId,
 } from "@/lib/catalog";
 import { cleanBackground, guessColor, resizePhoto } from "@/lib/image";
-import { AiUnavailable, analyzeGarment, type GarmentSide } from "@/lib/ai";
+import { AiUnavailable, analyzeFit, analyzeGarment, type GarmentSide } from "@/lib/ai";
 import { actions, newId, useArmario } from "@/lib/store";
 import type { Garment } from "@/lib/types";
 import { Chip, Section, Swatch } from "./ui";
@@ -116,6 +116,7 @@ export default function GarmentForm({
   const frontRef = useRef<HTMLInputElement>(null);
   const backRef = useRef<HTMLInputElement>(null);
   const labelRef = useRef<HTMLInputElement>(null);
+  const fitToken = useRef<Partial<Record<Side, number>>>({});
   const refs = { front: frontRef, back: backRef, label: labelRef };
 
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
@@ -182,7 +183,19 @@ export default function GarmentForm({
         ...f,
         [FIELD[side]]: dataUrl,
         ...(side === "front" ? { color: next.color } : {}),
+        // Foto nueva: el ajuste anterior ya no sirve.
+        ...(side !== "label" ? { fit: { ...f.fit, [side]: undefined } } : {}),
       }));
+      // En segundo plano, la IA ubica la prenda en la foto (giro, caja, color de tela) para el avatar 3D.
+      if (account && side !== "label") {
+        const token = (fitToken.current[side] = (fitToken.current[side] ?? 0) + 1);
+        analyzeFit(dataUrl)
+          .then((fit) => {
+            if (fitToken.current[side] !== token) return; // ya subiste otra foto
+            setForm((f) => ({ ...f, fit: { ...f.fit, [side]: fit } }));
+          })
+          .catch(() => {});
+      }
       if (ai === "working") return;
       if (side === "front") await analyze(next);
       else if (ai !== "done") await analyze(next);

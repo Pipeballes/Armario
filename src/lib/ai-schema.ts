@@ -260,3 +260,38 @@ export function parseChoice(raw: unknown, ids: string[]): ChoiceResult | null {
     tip: typeof r.tip === "string" ? r.tip.trim().slice(0, 300) : "",
   };
 }
+
+
+/** Para vestir el avatar: dónde está la prenda en la foto, cuánto está girada y el color de la tela. */
+export const FIT_PROMPT = `Mirá esta foto de UNA prenda (puede estar torcida, sobre una cama o un piso). Devolvé:
+- box: [ymin, xmin, ymax, xmax] de la prenda entera (con mangas), en números de 0 a 1000 respecto de la foto.
+- angle: cuántos grados está girada la prenda respecto de estar derecha con el cuello arriba. Positivo si está girada en el sentido de las agujas del reloj, negativo si al revés. Entre -90 y 90. Si está derecha, 0.
+- upside_down: true solo si el cuello o la cintura quedaron abajo (la prenda está al revés).
+- fabric: el color principal de la tela en hexadecimal (#rrggbb), sin contar estampados, logos, sombras ni el fondo.`;
+
+export const FIT_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    box: { type: "ARRAY", items: { type: "INTEGER" } },
+    angle: { type: "NUMBER" },
+    upside_down: { type: "BOOLEAN" },
+    fabric: { type: "STRING" },
+  },
+  required: ["box", "angle", "fabric"],
+};
+
+export function parseFit(raw: unknown): import("./types").GarmentFit | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const b = Array.isArray(r.box) ? r.box.map(Number) : [];
+  if (b.length !== 4 || b.some((n) => !Number.isFinite(n))) return null;
+  const [ymin, xmin, ymax, xmax] = b.map((n) => Math.min(1, Math.max(0, n / 1000)));
+  if (xmax - xmin < 0.05 || ymax - ymin < 0.05) return null;
+  let angle = Number(r.angle);
+  if (!Number.isFinite(angle)) angle = 0;
+  angle = Math.max(-90, Math.min(90, angle));
+  if (r.upside_down === true) angle += 180;
+  const fabric = typeof r.fabric === "string" && /^#[0-9a-f]{6}$/i.test(r.fabric.trim()) ? r.fabric.trim().toLowerCase() : null;
+  if (!fabric) return null;
+  return { angle: Math.round(angle * 10) / 10, box: [xmin, ymin, xmax, ymax], fabric };
+}

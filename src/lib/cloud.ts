@@ -26,6 +26,7 @@ interface GarmentRow {
   sport: string | null;
   kind: string | null;
   kind_detail: string | null;
+  fit: Garment["fit"] | null;
   created_at: string;
   last_worn: string | null;
 }
@@ -68,6 +69,7 @@ function rowToGarment(r: GarmentRow, urls: Map<string, string>): Garment {
     sport: r.sport ?? undefined,
     kind: r.kind ?? undefined,
     kindDetail: r.kind_detail ?? undefined,
+    fit: r.fit ?? undefined,
     name: r.name,
     category: r.category,
     color: r.color,
@@ -133,6 +135,7 @@ export function createCloud(sb: SupabaseClient, userId: string) {
         sport: g.sport || null,
         kind: g.kind || null,
         kind_detail: g.kind === "otro" ? g.kindDetail?.trim() || null : null,
+        fit: g.fit ?? null,
         created_at: new Date(g.createdAt).toISOString(),
         last_worn: g.lastWorn ? new Date(g.lastWorn).toISOString() : null,
       });

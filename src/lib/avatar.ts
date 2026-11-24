@@ -1,7 +1,7 @@
 // Datos del avatar 3D: proporciones del cuerpo según el perfil, color de piel y qué prenda va en cada lugar.
 
 import { SPECIAL_CATEGORIES, colorById, kindById, type BodyType } from "./catalog";
-import type { AvatarStyle, Garment, Profile } from "./types";
+import type { AvatarStyle, Garment, GarmentFit, Profile } from "./types";
 
 export interface BodyDims {
   /** Forma general del cuerpo según el género elegido. */
@@ -88,7 +88,7 @@ export interface Look {
     sleeves: "short" | "long";
     dress: "none" | "short" | "long";
     /** Si es estampada: las fotos de la prenda, para que se vea el estampado real. */
-    print?: { front: string; back?: string };
+    print?: { front: string; back?: string; fitFront?: GarmentFit; fitBack?: GarmentFit };
   } | null;
   bottom: { color: string; striped: boolean; kind: "pants" | "shorts" | "skirt" } | null;
   shoes: { color: string; boots: boolean } | null;
@@ -115,7 +115,10 @@ export function lookFrom(sel: Selection, garments: Garment[]): Look {
           // Con foto se ve el estampado real; sin foto, se dibujan rayas.
           striped: top.pattern === "estampado" && !top.photo,
           // Con foto se ve la prenda real (estampado, logos, textura); sin foto, color liso o rayas.
-          print: top.photo && top.category !== "dress" ? { front: top.photo, back: top.photoBack } : undefined,
+          print:
+            top.photo && top.category !== "dress"
+              ? { front: top.photo, back: top.photoBack, fitFront: top.fit?.front, fitBack: top.fit?.back }
+              : undefined,
           sleeves:
             look(top) === "corta" || (!look(top) && (top.warmth === "light" || /musculosa|remera|top\b/.test(name(top))))
               ? "short"

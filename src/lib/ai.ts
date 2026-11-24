@@ -8,7 +8,7 @@ export class AiUnavailable extends Error {}
 /** Si el servidor dijo que la IA no está configurada, no se vuelve a preguntar en esta sesión. */
 let notConfigured = false;
 
-async function call<T>(kind: "prenda" | "perfil", images: string[], extra: Record<string, unknown> = {}): Promise<T> {
+async function call<T>(kind: "prenda" | "perfil" | "ajuste", images: string[], extra: Record<string, unknown> = {}): Promise<T> {
   if (notConfigured) throw new AiUnavailable("La IA todavía no está configurada.");
   const token = await getAccessToken();
   if (!token) throw new AiUnavailable("Iniciá sesión para usar la IA.");
@@ -53,3 +53,6 @@ export async function chooseOutfit(choose: import("./ai-schema").ChooseRequest):
   if (!res.ok) throw new Error(data.error ?? "La IA no respondió.");
   return data;
 }
+
+/** Dónde está la prenda en la foto, cuánto está girada y el color de la tela (para vestir el avatar). */
+export const analyzeFit = (image: string) => call<import("./types").GarmentFit>("ajuste", [image]);

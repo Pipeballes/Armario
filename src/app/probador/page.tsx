@@ -2,7 +2,8 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { ensureFit, needsFit } from "@/lib/fit";
 import {
   SLOTS,
   bodyDims,
@@ -60,7 +61,7 @@ function initialSelection(): Selection {
 }
 
 export default function ProbadorPage() {
-  const { ready, garments, profile, error } = useArmario();
+  const { ready, garments, profile, error, account } = useArmario();
   const [sel, setSel] = useState<Selection>(initialSelection);
   const [slot, setSlot] = useState<Slot>("top");
   const [view, setView] = useState<View>("frente");
@@ -70,6 +71,19 @@ export default function ProbadorPage() {
   const dims = useMemo(() => bodyDims(profile), [profile]);
   const skin = useMemo(() => skinColor(profile), [profile]);
   const look = useMemo(() => lookFrom(sel, garments), [sel, garments]);
+  // Las prendas cargadas antes no tienen el ajuste de la foto: la IA lo calcula la primera vez que te las probás.
+  const [fitting, setFitting] = useState(false);
+  const selectedTop = garments.find((g) => g.id === sel.top);
+  useEffect(() => {
+    if (!account || !selectedTop || !needsFit(selectedTop)) return;
+    let alive = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFitting(true);
+    ensureFit(selectedTop).finally(() => alive && setFitting(false));
+    return () => {
+      alive = false;
+    };
+  }, [account, selectedTop]);
   const style = useMemo(() => avatarOf(profile), [profile]);
 
   if (!ready) return <Loading />;
@@ -104,6 +118,11 @@ export default function ProbadorPage() {
 
       <div className="card relative mb-3 h-[58vh] min-h-[340px] overflow-hidden p-0">
         <Avatar3D dims={dims} skin={skin} look={look} view={view} style={style} onUserMove={() => setTouched(true)} />
+        {fitting && (
+          <p className="absolute top-3 left-1/2 -translate-x-1/2 animate-pulse rounded-full bg-black/60 px-3 py-1 text-xs text-white">
+            ✨ Acomodando la prenda…
+          </p>
+        )}
         {!touched && view !== "otro" && (
           <p className="pointer-events-none absolute inset-x-0 bottom-3 text-center text-xs text-muted">
             👆 Arrastrá para girar · 🤏 pellizcá para acercar
