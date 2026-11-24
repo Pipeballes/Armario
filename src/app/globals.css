@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f6f1ea;
+  --surface: #fffdf9;
+  --surface-2: #efe7dc;
+  --ink: #221d18;
+  --muted: #6f655a;
+  --line: #e2d8ca;
+  --accent: #b5532f;
+  --accent-ink: #ffffff;
+  --accent-soft: #f3dfd3;
+  --ok: #2f7a4f;
+  --danger: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17140f;
+    --surface: #211d17;
+    --surface-2: #2c261e;
+    --ink: #f2ece3;
+    --muted: #a99d8e;
+    --line: #3a3228;
+    --accent: #e0805b;
+    --accent-ink: #1b120d;
+    --accent-soft: #3d2a20;
+    --ok: #6cc08f;
+    --danger: #f2877f;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-ok: var(--ok);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-sans-app);
+  --font-display: var(--font-display-app);
+}
+
+html {
+  background: var(--bg);
+  color-scheme: light dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition active:scale-[0.98] disabled:opacity-50;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-surface;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-accent-ink;
+  }
+  .btn-ghost {
+    @apply btn border border-line bg-surface text-ink;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 py-2 text-sm text-ink transition;
+  }
+  .chip[aria-pressed="true"] {
+    @apply border-accent bg-accent-soft font-semibold;
+  }
+  .label {
+    @apply mb-2 block text-xs font-semibold tracking-wide text-muted uppercase;
+  }
+  .input {
+    @apply w-full rounded-xl border border-line bg-surface px-4 py-3 text-base text-ink outline-none focus:border-accent;
+  }
+  .page-title {
+    @apply font-display text-3xl leading-tight font-semibold;
+  }
+}
