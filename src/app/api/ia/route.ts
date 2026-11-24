@@ -27,7 +27,8 @@ async function userFromToken(token: string | null): Promise<string | null> {
 }
 
 export async function POST(request: Request) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  // Se acepta también el nombre con minúsculas, tal como quedó cargado en Vercel.
+  const apiKey = process.env.GEMINI_API_KEY || process.env.Gemini_API_Key;
   if (!apiKey) return fail(503, "La IA todavía no está configurada.");
 
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? null;
