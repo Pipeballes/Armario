@@ -114,7 +114,8 @@ export function lookFrom(sel: Selection, garments: Garment[]): Look {
           color: hex(top),
           // Con foto se ve el estampado real; sin foto, se dibujan rayas.
           striped: top.pattern === "estampado" && !top.photo,
-          print: top.pattern === "estampado" && top.photo ? { front: top.photo, back: top.photoBack } : undefined,
+          // Con foto se ve la prenda real (estampado, logos, textura); sin foto, color liso o rayas.
+          print: top.photo && top.category !== "dress" ? { front: top.photo, back: top.photoBack } : undefined,
           sleeves:
             look(top) === "corta" || (!look(top) && (top.warmth === "light" || /musculosa|remera|top\b/.test(name(top))))
               ? "short"
