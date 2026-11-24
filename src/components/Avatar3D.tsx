@@ -387,7 +387,7 @@ function Hair({ kind, color, backOnly = false }: { kind: AvatarStyle["hair"]; co
 }
 
 function torsoProfile(d: BodyDims, inflate = 0, from = 0.9, to = 1.49): [number, number][] {
-  const chest = Math.max(d.waist, d.shoulder * 0.85);
+  const chest = Math.max(d.waist, d.shoulder * (d.feminine ? 0.95 : 0.85));
   const pts: [number, number][] = [
     [d.hip * 0.95, 0.9],
     [d.hip, 0.98],
@@ -421,8 +421,10 @@ function Body({ d, skin, look, style }: { d: BodyDims; skin: string; look: Look;
   const thigh = 0.066 * Math.min(1.25, Math.max(0.85, d.hip / 0.17));
   const calf = 0.055;
 
-  const top = look.top;
-  const bottom = look.bottom;
+  // Si no elegiste nada, el avatar lleva una remera y un short básicos grises.
+  const top = look.top ?? { color: "#d6d0c6", striped: false, sleeves: "short" as const, dress: "none" as const };
+  const bottom =
+    look.bottom ?? (look.top && look.top.dress !== "none" ? null : { color: "#8f8a82", striped: false, kind: "shorts" as const });
   const outer = look.outerwear;
   const sleeveLen = outer ? "long" : top?.sleeves;
   const skirtHem = top?.dress === "long" ? 0.14 : 0.55;

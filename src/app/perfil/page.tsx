@@ -105,6 +105,24 @@ export default function PerfilPage() {
         {account ? "Se guarda en tu cuenta." : "Por ahora se guarda solo en este dispositivo."}
       </p>
 
+      <section className="card mb-6 p-4">
+        <p className="mb-1 font-semibold">¿Con qué género te identificás?</p>
+        <p className="mb-3 text-sm text-muted">Así adapto tu avatar, las prendas que te sugiero y los consejos.</p>
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              ["hombre", "Hombre"],
+              ["mujer", "Mujer"],
+              ["otro", "Otro / prefiero no decir"],
+            ] as const
+          ).map(([id, text]) => (
+            <Chip key={id} pressed={profile.gender === id} onClick={() => save({ gender: id })}>
+              {text}
+            </Chip>
+          ))}
+        </div>
+      </section>
+
       <ProfileAnalysis />
       <AccountSection />
       <CalendarSection />
@@ -118,7 +136,10 @@ export default function PerfilPage() {
         />
       </Section>
 
-      <Section title="Subtono de piel" hint="Mirá las venas de tu muñeca con luz natural.">
+      <Section
+        title="Subtono de piel"
+        hint={profile.aiAdvice ? "✨ Lo completó la IA con tus fotos. No hace falta marcarlo; si no te convence, tocá otra opción." : "Mirá las venas de tu muñeca con luz natural."}
+      >
         <div className="space-y-2">
           {UNDERTONES.map((u) => (
             <button
@@ -149,7 +170,7 @@ export default function PerfilPage() {
         )}
       </Section>
 
-      <Section title="Tono de piel">
+      <Section title="Tono de piel" hint={profile.aiAdvice && profile.skinDepth ? "✨ Lo completó la IA." : undefined}>
         <div className="flex flex-wrap gap-2">
           {SKIN_DEPTHS.map((s) => (
             <Chip key={s.id} pressed={profile.skinDepth === s.id} onClick={() => save({ skinDepth: s.id })}>
@@ -159,7 +180,10 @@ export default function PerfilPage() {
         </div>
       </Section>
 
-      <Section title="Tu silueta" hint="Elegí la que más se parezca. No hay una mejor que otra.">
+      <Section
+        title="Tu silueta"
+        hint={profile.aiAdvice && profile.bodyType ? "✨ Lo completó la IA. Si no te convence, elegí otra (no hay una mejor que otra)." : "Elegí la que más se parezca. No hay una mejor que otra."}
+      >
         <div className="space-y-2">
           {BODY_TYPES.map((b) => (
             <button

@@ -6,8 +6,8 @@ import {
   CHOOSE_SCHEMA,
   GARMENT_PROMPT,
   GARMENT_SCHEMA,
-  PROFILE_PROMPT,
   PROFILE_SCHEMA,
+  profilePromptFor,
   choosePrompt,
   parseChoice,
   parseGarment,
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? null;
   if (!(await userFromToken(token))) return fail(401, "Iniciá sesión para usar la IA.");
 
-  let body: { kind?: string; image?: string; images?: string[]; choose?: ChooseRequest };
+  let body: { kind?: string; image?: string; images?: string[]; choose?: ChooseRequest; gender?: string };
   try {
     body = await request.json();
   } catch {
@@ -117,8 +117,8 @@ export async function POST(request: Request) {
     text: isGarment
       ? GARMENT_PROMPT
       : parts.length > 1
-        ? `${PROFILE_PROMPT}\n\nTe paso ${parts.length} fotos de la MISMA persona, con distintos ángulos y luces. Combiná lo que ves en todas para dar una sola respuesta. Si la luz de alguna cambia el color de la piel, confiá más en las que tienen luz natural.`
-        : PROFILE_PROMPT,
+        ? `${profilePromptFor(body.gender)}\n\nTe paso ${parts.length} fotos de la MISMA persona, con distintos ángulos y luces. Combiná lo que ves en todas para dar una sola respuesta. Si la luz de alguna cambia el color de la piel, confiá más en las que tienen luz natural.`
+        : profilePromptFor(body.gender),
   });
   const r = await askGemini(apiKey, parts, isGarment ? GARMENT_SCHEMA : PROFILE_SCHEMA);
   if ("error" in r) return r.error;

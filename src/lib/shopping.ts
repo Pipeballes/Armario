@@ -59,7 +59,7 @@ export function shoppingSuggestions(garments: Garment[], profile: Profile, limit
   if (garments.length < 3) return [];
   const base = goodByOccasion(garments, profile);
   const baseTotal = [...base.values()].reduce((a, b) => a + b, 0);
-  const hasDress = garments.some((g) => g.category === "dress");
+  const hasDress = garments.some((g) => g.category === "dress") || profile.gender === "mujer";
   const out: Suggestion[] = [];
 
   for (const b of BASICS) {

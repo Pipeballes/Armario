@@ -26,8 +26,12 @@ export interface Garment {
   lastWorn?: number;
 }
 
+export type Gender = "hombre" | "mujer" | "otro";
+
 export interface Profile {
   name: string;
+  /** Cómo se identifica la persona (adapta avatar, prendas sugeridas y consejos). */
+  gender?: Gender | null;
   undertone: Undertone | null;
   skinDepth: SkinDepth | null;
   bodyType: BodyType | null;
@@ -38,6 +42,8 @@ export interface Profile {
   inspiration: string[];
   /** Consejo que dio la IA al analizar una foto. */
   aiAdvice?: string;
+  /** Fotos tuyas para el análisis de la IA (en la nube: rutas privadas). */
+  selfies?: string[];
   /** (Viejo) un solo link de calendario. Se lee como el primero de `calendars`. */
   calendarUrl?: string;
   /** Calendarios compartidos (iCloud o Google), cada uno con su nombre y color. */

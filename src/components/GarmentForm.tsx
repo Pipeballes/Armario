@@ -54,7 +54,7 @@ export default function GarmentForm({
   // Foto original y con fondo limpio, para poder elegir.
   const [versions, setVersions] = useState<{ original: string; clean: string | null } | null>(null);
   const [ai, setAi] = useState<"idle" | "working" | "done" | "error">("idle");
-  const { account } = useArmario();
+  const { account, profile } = useArmario();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
@@ -180,7 +180,7 @@ export default function GarmentForm({
 
       <Section title="¿Qué es?">
         <div className="flex flex-wrap gap-2">
-          {CATEGORIES.map((c) => (
+          {CATEGORIES.filter((c) => c.id !== "dress" || profile.gender !== "hombre" || form.category === "dress").map((c) => (
             <Chip
               key={c.id}
               pressed={form.category === c.id}

@@ -83,7 +83,7 @@ export default function OutfitsPage() {
         occasion: occ,
         weather: w,
         event: event?.title,
-        profile: { undertone: profile.undertone, bodyType: profile.bodyType, styles: profile.styles },
+        profile: { undertone: profile.undertone, bodyType: profile.bodyType, styles: profile.styles, gender: profile.gender },
         options: pool.map((o, i) => ({
           id: String(i),
           items: o.items.map((g) => ({ name: g.name, category: g.category, color: g.color, formality: g.formality, pattern: g.pattern })),
