@@ -67,7 +67,11 @@ export default function PerfilPage() {
         version: 1,
         exportedAt: new Date().toISOString(),
         profile: { ...profile, inspiration: await Promise.all(profile.inspiration.map(toData)) },
-        garments: await Promise.all(garments.map(async (g) => ({ ...g, photo: await toData(g.photo) }))),
+        garments: await Promise.all(garments.map(async (g) => ({
+            ...g,
+            photo: await toData(g.photo),
+            photoBack: g.photoBack ? await toData(g.photoBack) : undefined,
+          }))),
       };
     } catch {
       setStatus("No se pudo preparar la copia. Revisá tu conexión.");

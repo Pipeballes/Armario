@@ -100,7 +100,7 @@ export async function POST(request: Request) {
 
   if (body.kind !== "prenda" && body.kind !== "perfil") return fail(400, "Tipo de análisis inválido.");
   const raw = Array.isArray(body.images) ? body.images : body.image ? [body.image] : [];
-  const max = body.kind === "perfil" ? MAX_PROFILE_PHOTOS : 1;
+  const max = body.kind === "perfil" ? MAX_PROFILE_PHOTOS : 2;
   if (raw.length === 0 || raw.length > max) return fail(400, `Mandá entre 1 y ${max} fotos.`);
   if (raw.reduce((n, x) => n + (typeof x === "string" ? x.length : 0), 0) > MAX_TOTAL_CHARS) {
     return fail(413, "Las fotos son muy pesadas. Probá con menos fotos.");
@@ -115,7 +115,9 @@ export async function POST(request: Request) {
   const isGarment = body.kind === "prenda";
   parts.push({
     text: isGarment
-      ? GARMENT_PROMPT
+      ? parts.length > 1
+        ? `${GARMENT_PROMPT}\n\nTe paso 2 fotos de la MISMA prenda: la primera es la parte de adelante y la segunda la de atrás. Si atrás tiene un estampado o logo grande, contalo como estampado.`
+        : GARMENT_PROMPT
       : parts.length > 1
         ? `${profilePromptFor(body.gender)}\n\nTe paso ${parts.length} fotos de la MISMA persona, con distintos ángulos y luces. Combiná lo que ves en todas para dar una sola respuesta. Si la luz de alguna cambia el color de la piel, confiá más en las que tienen luz natural.`
         : profilePromptFor(body.gender),

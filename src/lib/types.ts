@@ -11,8 +11,10 @@ import type {
 
 export interface Garment {
   id: string;
-  /** Foto achicada guardada como data URL (JPEG). */
+  /** Foto de adelante (data URL o link firmado). */
   photo: string;
+  /** Foto de atrás. */
+  photoBack?: string;
   name: string;
   category: Category;
   color: string;

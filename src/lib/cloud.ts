@@ -20,6 +20,7 @@ interface GarmentRow {
   formality: number;
   warmth: Garment["warmth"];
   photo_path: string;
+  photo_back_path: string | null;
   created_at: string;
   last_worn: string | null;
 }
@@ -52,10 +53,11 @@ async function upload(sb: SupabaseClient, path: string, dataUrl: string): Promis
   if (error) throw error;
 }
 
-function rowToGarment(r: GarmentRow, photo: string): Garment {
+function rowToGarment(r: GarmentRow, photo: string, photoBack?: string): Garment {
   return {
     id: r.id,
     photo,
+    photoBack,
     name: r.name,
     category: r.category,
     color: r.color,
@@ -79,21 +81,32 @@ export function createCloud(sb: SupabaseClient, userId: string) {
       const rows = data as GarmentRow[];
       const urls = await signAll(
         sb,
-        rows.map((r) => r.photo_path),
+        rows.flatMap((r) => (r.photo_back_path ? [r.photo_path, r.photo_back_path] : [r.photo_path])),
       );
-      return rows.map((r) => rowToGarment(r, urls.get(r.photo_path) ?? ""));
+      return rows.map((r) =>
+        rowToGarment(r, urls.get(r.photo_path) ?? "", r.photo_back_path ? urls.get(r.photo_back_path) : undefined),
+      );
     },
 
     /** Guarda la prenda. Si la foto es nueva (data URL) la sube y devuelve la prenda con su URL. */
     async saveGarment(g: Garment): Promise<Garment> {
-      let photoPath = pathBySrc.get(g.photo);
-      let photo = g.photo;
-      if (g.photo.startsWith("data:") || !photoPath) {
-        photoPath = `${userId}/${g.id}-${Date.now()}.jpg`;
-        await upload(sb, photoPath, g.photo);
-        photo = (await signAll(sb, [photoPath])).get(photoPath) ?? g.photo;
-      }
-      const { data: old } = await sb.from("garments").select("photo_path").eq("id", g.id).maybeSingle();
+      // Sube la foto si es nueva; si ya estaba en la nube, reusa su ruta.
+      const store = async (src: string, suffix: string): Promise<{ path: string; url: string }> => {
+        const known = pathBySrc.get(src);
+        if (known && !src.startsWith("data:")) return { path: known, url: src };
+        const path = `${userId}/${g.id}${suffix}-${Date.now()}.jpg`;
+        await upload(sb, path, src);
+        return { path, url: (await signAll(sb, [path])).get(path) ?? src };
+      };
+      const front = await store(g.photo, "");
+      const back = g.photoBack ? await store(g.photoBack, "-atras") : null;
+      const photoPath = front.path;
+      const photo = front.url;
+      const { data: old } = await sb
+        .from("garments")
+        .select("photo_path, photo_back_path")
+        .eq("id", g.id)
+        .maybeSingle();
       const { error } = await sb.from("garments").upsert({
         id: g.id,
         user_id: userId,
@@ -105,21 +118,24 @@ export function createCloud(sb: SupabaseClient, userId: string) {
         formality: g.formality,
         warmth: g.warmth,
         photo_path: photoPath,
+        photo_back_path: back?.path ?? null,
         created_at: new Date(g.createdAt).toISOString(),
         last_worn: g.lastWorn ? new Date(g.lastWorn).toISOString() : null,
       });
       if (error) throw error;
-      if (old?.photo_path && old.photo_path !== photoPath) {
-        await sb.storage.from(BUCKET).remove([old.photo_path]);
-      }
-      return { ...g, photo };
+      const stale = [old?.photo_path, old?.photo_back_path].filter(
+        (x): x is string => Boolean(x) && x !== photoPath && x !== back?.path,
+      );
+      if (stale.length) await sb.storage.from(BUCKET).remove(stale);
+      return { ...g, photo, photoBack: back?.url };
     },
 
     async deleteGarment(id: string): Promise<void> {
-      const { data } = await sb.from("garments").select("photo_path").eq("id", id).maybeSingle();
+      const { data } = await sb.from("garments").select("photo_path, photo_back_path").eq("id", id).maybeSingle();
       const { error } = await sb.from("garments").delete().eq("id", id);
       if (error) throw error;
-      if (data?.photo_path) await sb.storage.from(BUCKET).remove([data.photo_path]);
+      const files = [data?.photo_path, data?.photo_back_path].filter((x): x is string => Boolean(x));
+      if (files.length) await sb.storage.from(BUCKET).remove(files);
     },
 
     async markWorn(ids: string[], when: number): Promise<void> {
