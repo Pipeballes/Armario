@@ -11,7 +11,8 @@ import {
   parseProfile,
 } from "@/lib/ai-schema";
 
-const MAX_IMAGE_CHARS = 4_000_000; // ~3 MB de imagen en base64
+const MAX_TOTAL_CHARS = 4_000_000; // Vercel acepta hasta 4.5 MB por pedido
+const MAX_PROFILE_PHOTOS = 5;
 
 function fail(status: number, message: string) {
   return Response.json({ error: message }, { status });
@@ -34,23 +35,39 @@ export async function POST(request: Request) {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? null;
   if (!(await userFromToken(token))) return fail(401, "Iniciá sesión para usar la IA.");
 
-  let body: { kind?: string; image?: string };
+  let body: { kind?: string; image?: string; images?: string[] };
   try {
     body = await request.json();
   } catch {
     return fail(400, "Pedido inválido.");
   }
-  const match = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(body.image ?? "");
-  if (!match || body.image!.length > MAX_IMAGE_CHARS) return fail(400, "La foto no es válida o es muy grande.");
   if (body.kind !== "prenda" && body.kind !== "perfil") return fail(400, "Tipo de análisis inválido.");
+  const raw = Array.isArray(body.images) ? body.images : body.image ? [body.image] : [];
+  const max = body.kind === "perfil" ? MAX_PROFILE_PHOTOS : 1;
+  if (raw.length === 0 || raw.length > max) return fail(400, `Mandá entre 1 y ${max} fotos.`);
+  if (raw.reduce((n, x) => n + (typeof x === "string" ? x.length : 0), 0) > MAX_TOTAL_CHARS) {
+    return fail(413, "Las fotos son muy pesadas. Probá con menos fotos.");
+  }
+  const parts: { inline_data: { mime_type: string; data: string } }[] = [];
+  for (const img of raw) {
+    const m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(typeof img === "string" ? img : "");
+    if (!m) return fail(400, "Alguna de las fotos no es válida.");
+    parts.push({ inline_data: { mime_type: m[1], data: m[2] } });
+  }
 
   const isGarment = body.kind === "prenda";
   const payload = JSON.stringify({
     contents: [
       {
         parts: [
-          { inline_data: { mime_type: match[1], data: match[2] } },
-          { text: isGarment ? GARMENT_PROMPT : PROFILE_PROMPT },
+          ...parts,
+          {
+            text: isGarment
+              ? GARMENT_PROMPT
+              : parts.length > 1
+                ? `${PROFILE_PROMPT}\n\nTe paso ${parts.length} fotos de la MISMA persona, con distintos ángulos y luces. Combiná lo que ves en todas para dar una sola respuesta. Si la luz de alguna cambia el color de la piel, confiá más en las que tienen luz natural.`
+                : PROFILE_PROMPT,
+          },
         ],
       },
     ],

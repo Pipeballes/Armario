@@ -8,14 +8,14 @@ export class AiUnavailable extends Error {}
 /** Si el servidor dijo que la IA no está configurada, no se vuelve a preguntar en esta sesión. */
 let notConfigured = false;
 
-async function call<T>(kind: "prenda" | "perfil", image: string): Promise<T> {
+async function call<T>(kind: "prenda" | "perfil", images: string[]): Promise<T> {
   if (notConfigured) throw new AiUnavailable("La IA todavía no está configurada.");
   const token = await getAccessToken();
   if (!token) throw new AiUnavailable("Iniciá sesión para usar la IA.");
   const res = await fetch("/api/ia", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-    body: JSON.stringify({ kind, image }),
+    body: JSON.stringify({ kind, images }),
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 503) notConfigured = true;
@@ -24,5 +24,6 @@ async function call<T>(kind: "prenda" | "perfil", image: string): Promise<T> {
   return data as T;
 }
 
-export const analyzeGarment = (image: string) => call<GarmentAnalysis>("prenda", image);
-export const analyzeProfile = (image: string) => call<ProfileAnalysis>("perfil", image);
+export const analyzeGarment = (image: string) => call<GarmentAnalysis>("prenda", [image]);
+/** Analiza de 1 a 5 fotos de la persona juntas, para no quedarse con una sola impresión. */
+export const analyzeProfile = (images: string[]) => call<ProfileAnalysis>("perfil", images);

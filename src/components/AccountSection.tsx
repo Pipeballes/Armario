@@ -36,10 +36,15 @@ export default function AccountSection() {
       setCooldown(60);
     } catch (err) {
       const text = err instanceof Error ? err.message : "";
+      const status = (err as { status?: number })?.status;
       setMsg(
         /rate|seconds|limit/i.test(text)
           ? "Se pidieron muchos mails seguidos. Esperá unos minutos y probá de nuevo (si ya tenés un código, usalo)."
-          : "No se pudo mandar el mail. Revisá la dirección y probá de nuevo.",
+          : /invalid.*email|email.*invalid/i.test(text)
+            ? "Esa dirección de mail no es válida. Revisala y probá de nuevo."
+            : status && status >= 500
+              ? "No pude mandar el mail por un problema del servicio de envío (no es tu dirección). Probá en un rato."
+              : "No se pudo mandar el mail. Revisá tu conexión y probá de nuevo.",
       );
     } finally {
       setBusy(false);
