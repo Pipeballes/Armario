@@ -24,8 +24,15 @@ async function call<T>(kind: "prenda" | "perfil", images: string[], extra: Recor
   return data as T;
 }
 
-/** Analiza una prenda con la foto de adelante (y la de atrás si está). */
-export const analyzeGarment = (images: string[]) => call<GarmentAnalysis>("prenda", images);
+export type GarmentSide = "adelante" | "atrás" | "etiqueta";
+
+/** Analiza una prenda con sus fotos (adelante, atrás y etiqueta, las que haya). */
+export const analyzeGarment = (photos: { src: string; side: GarmentSide }[]) =>
+  call<GarmentAnalysis>(
+    "prenda",
+    photos.map((p) => p.src),
+    { sides: photos.map((p) => p.side) },
+  );
 /** Analiza de 1 a 15 fotos de la persona juntas, para no quedarse con una sola impresión. */
 export const analyzeProfile = (images: string[], gender?: string | null) =>
   call<ProfileAnalysis>("perfil", images, { gender });

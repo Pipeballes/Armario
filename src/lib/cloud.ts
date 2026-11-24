@@ -21,6 +21,8 @@ interface GarmentRow {
   warmth: Garment["warmth"];
   photo_path: string;
   photo_back_path: string | null;
+  photo_label_path: string | null;
+  size: string | null;
   created_at: string;
   last_worn: string | null;
 }
@@ -53,11 +55,13 @@ async function upload(sb: SupabaseClient, path: string, dataUrl: string): Promis
   if (error) throw error;
 }
 
-function rowToGarment(r: GarmentRow, photo: string, photoBack?: string): Garment {
+function rowToGarment(r: GarmentRow, urls: Map<string, string>): Garment {
   return {
     id: r.id,
-    photo,
-    photoBack,
+    photo: urls.get(r.photo_path) ?? "",
+    photoBack: r.photo_back_path ? urls.get(r.photo_back_path) : undefined,
+    photoLabel: r.photo_label_path ? urls.get(r.photo_label_path) : undefined,
+    size: r.size ?? undefined,
     name: r.name,
     category: r.category,
     color: r.color,
@@ -81,11 +85,9 @@ export function createCloud(sb: SupabaseClient, userId: string) {
       const rows = data as GarmentRow[];
       const urls = await signAll(
         sb,
-        rows.flatMap((r) => (r.photo_back_path ? [r.photo_path, r.photo_back_path] : [r.photo_path])),
+        rows.flatMap((r) => [r.photo_path, r.photo_back_path, r.photo_label_path].filter((x): x is string => Boolean(x))),
       );
-      return rows.map((r) =>
-        rowToGarment(r, urls.get(r.photo_path) ?? "", r.photo_back_path ? urls.get(r.photo_back_path) : undefined),
-      );
+      return rows.map((r) => rowToGarment(r, urls));
     },
 
     /** Guarda la prenda. Si la foto es nueva (data URL) la sube y devuelve la prenda con su URL. */
@@ -100,11 +102,12 @@ export function createCloud(sb: SupabaseClient, userId: string) {
       };
       const front = await store(g.photo, "");
       const back = g.photoBack ? await store(g.photoBack, "-atras") : null;
+      const label = g.photoLabel ? await store(g.photoLabel, "-etiqueta") : null;
       const photoPath = front.path;
       const photo = front.url;
       const { data: old } = await sb
         .from("garments")
-        .select("photo_path, photo_back_path")
+        .select("photo_path, photo_back_path, photo_label_path")
         .eq("id", g.id)
         .maybeSingle();
       const { error } = await sb.from("garments").upsert({
@@ -119,22 +122,29 @@ export function createCloud(sb: SupabaseClient, userId: string) {
         warmth: g.warmth,
         photo_path: photoPath,
         photo_back_path: back?.path ?? null,
+        photo_label_path: label?.path ?? null,
+        size: g.size?.trim() || null,
         created_at: new Date(g.createdAt).toISOString(),
         last_worn: g.lastWorn ? new Date(g.lastWorn).toISOString() : null,
       });
       if (error) throw error;
-      const stale = [old?.photo_path, old?.photo_back_path].filter(
-        (x): x is string => Boolean(x) && x !== photoPath && x !== back?.path,
+      const keep = new Set([photoPath, back?.path, label?.path]);
+      const stale = [old?.photo_path, old?.photo_back_path, old?.photo_label_path].filter(
+        (x): x is string => Boolean(x) && !keep.has(x!),
       );
       if (stale.length) await sb.storage.from(BUCKET).remove(stale);
-      return { ...g, photo, photoBack: back?.url };
+      return { ...g, photo, photoBack: back?.url, photoLabel: label?.url };
     },
 
     async deleteGarment(id: string): Promise<void> {
-      const { data } = await sb.from("garments").select("photo_path, photo_back_path").eq("id", id).maybeSingle();
+      const { data } = await sb
+        .from("garments")
+        .select("photo_path, photo_back_path, photo_label_path")
+        .eq("id", id)
+        .maybeSingle();
       const { error } = await sb.from("garments").delete().eq("id", id);
       if (error) throw error;
-      const files = [data?.photo_path, data?.photo_back_path].filter((x): x is string => Boolean(x));
+      const files = [data?.photo_path, data?.photo_back_path, data?.photo_label_path].filter((x): x is string => Boolean(x));
       if (files.length) await sb.storage.from(BUCKET).remove(files);
     },
 

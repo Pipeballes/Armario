@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseChoice } from "./ai-schema";
+import { parseChoice, parseSize } from "./ai-schema";
 
 describe("parseChoice", () => {
   it("ordena según la IA y agrega al final lo que no nombró", () => {
@@ -15,5 +15,15 @@ describe("parseChoice", () => {
   it("si la respuesta no sirve devuelve null", () => {
     expect(parseChoice({ order: ["x"] }, ["1", "2"])).toBeNull();
     expect(parseChoice(null, ["1"])).toBeNull();
+  });
+});
+
+describe("parseSize", () => {
+  it("limpia el talle leído de la etiqueta", () => {
+    expect(parseSize("Talle: m")).toBe("M");
+    expect(parseSize(" 42 ")).toBe("42");
+    expect(parseSize("")).toBeUndefined();
+    expect(parseSize("no se ve")).toBeUndefined();
+    expect(parseSize(null)).toBeUndefined();
   });
 });

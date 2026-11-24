@@ -11,7 +11,7 @@ import {
   type StyleId,
 } from "@/lib/catalog";
 import { cleanBackground, guessColor, resizePhoto } from "@/lib/image";
-import { AiUnavailable, analyzeGarment } from "@/lib/ai";
+import { AiUnavailable, analyzeGarment, type GarmentSide } from "@/lib/ai";
 import { actions, newId, useArmario } from "@/lib/store";
 import type { Garment } from "@/lib/types";
 import { Chip, Section, Swatch } from "./ui";
@@ -28,8 +28,13 @@ const DEFAULT_FORMALITY: Record<Category, number> = {
 /** Prendas que necesitan foto de atrás (en calzado y accesorios es opcional). */
 export const needsBack = (c: Category) => c === "top" || c === "bottom" || c === "dress" || c === "outerwear";
 
-type Side = "front" | "back";
-const FIELD = { front: "photo", back: "photoBack" } as const;
+type Side = "front" | "back" | "label";
+const FIELD = { front: "photo", back: "photoBack", label: "photoLabel" } as const;
+const AI_SIDE: Record<Side, GarmentSide> = { front: "adelante", back: "atrás", label: "etiqueta" };
+const SIDES: Side[] = ["front", "back", "label"];
+
+/** Talles más comunes, para tocar en vez de escribir. */
+const QUICK_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "Único"];
 
 function blank(): Omit<Garment, "id" | "createdAt"> {
   return {
@@ -63,19 +68,28 @@ export default function GarmentForm({
   const { account, profile } = useArmario();
   const frontRef = useRef<HTMLInputElement>(null);
   const backRef = useRef<HTMLInputElement>(null);
+  const labelRef = useRef<HTMLInputElement>(null);
+  const refs = { front: frontRef, back: backRef, label: labelRef };
 
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
-  async function analyze(images: string[]) {
-    if (!account || !images.length) return;
+  /** Fotos para la IA, en orden: adelante, atrás, etiqueta (las que haya). */
+  const photosFor = (f: typeof form) =>
+    SIDES.filter((side) => f[FIELD[side]]).map((side) => ({ src: f[FIELD[side]]!, side: AI_SIDE[side] }));
+
+  /** onlySize: la IA ya completó todo; solo se toma el talle (para no pisar lo que corregiste). */
+  async function analyze(next: typeof form, onlySize = false) {
+    if (!account || !next.photo) return;
     setAi("working");
     try {
-      const r = await analyzeGarment(images);
-      setForm((f) => ({ ...f, ...r, name: f.name || r.name }));
+      const { size, ...r } = await analyzeGarment(photosFor(next));
+      setForm((f) =>
+        onlySize ? { ...f, size: f.size || size } : { ...f, ...r, name: f.name || r.name, size: f.size || size },
+      );
       setAi("done");
     } catch (e) {
-      setAi(e instanceof AiUnavailable ? "idle" : "error");
+      setAi(e instanceof AiUnavailable ? (onlySize ? "done" : "idle") : "error");
     }
   }
 
@@ -83,21 +97,21 @@ export default function GarmentForm({
     if (!file) return;
     setError(null);
     try {
-      const { dataUrl: original, canvas } = await resizePhoto(file);
-      const clean = cleanBackground(canvas);
+      // La etiqueta se guarda más grande y sin limpiar, para que se lea el texto.
+      const { dataUrl: original, canvas } = await resizePhoto(file, side === "label" ? 1200 : 900);
+      const clean = side === "label" ? null : cleanBackground(canvas);
       const dataUrl = clean ?? original;
       setVersions((v) => ({ ...v, [side]: { original, clean } }));
+      const next = { ...form, [FIELD[side]]: dataUrl };
       if (side === "front") {
-        const color = guessColor(canvas);
-        setForm((f) => ({ ...f, photo: dataUrl, color }));
+        next.color = guessColor(canvas);
         setColorGuessed(true);
-        // Con foto nueva de adelante, la IA vuelve a mirar (con la de atrás si ya está).
-        await analyze([dataUrl, form.photoBack].filter((x): x is string => Boolean(x)));
-      } else {
-        setForm((f) => ({ ...f, photoBack: dataUrl }));
-        // Si la de adelante ya estaba pero la IA todavía no la vio, analiza las dos juntas.
-        if (form.photo && ai !== "done" && ai !== "working") await analyze([form.photo, dataUrl]);
       }
+      setForm((f) => ({ ...f, [FIELD[side]]: dataUrl, ...(side === "front" ? { color: next.color } : {}) }));
+      if (ai === "working") return;
+      if (side === "front") await analyze(next);
+      else if (ai !== "done") await analyze(next);
+      else if (side === "label" && !form.size) await analyze(next, true);
     } catch {
       setError("No se pudo leer esa foto. Probá con otra.");
     }
@@ -119,6 +133,11 @@ export default function GarmentForm({
       setError("Falta la foto de atrás de la prenda (dala vuelta y sacale otra).");
       return;
     }
+    if (!form.size?.trim()) {
+      setError("Falta el talle. Escribilo o sacale foto a la etiqueta.");
+      document.getElementById("talle")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     setBusy(true);
     const cat = CATEGORIES.find((c) => c.id === form.category)!;
     const garment: Garment = {
@@ -136,6 +155,7 @@ export default function GarmentForm({
         setAi("idle");
         if (frontRef.current) frontRef.current.value = "";
         if (backRef.current) backRef.current.value = "";
+        if (labelRef.current) labelRef.current.value = "";
       }
       onDone(another);
     } catch {
@@ -160,11 +180,11 @@ export default function GarmentForm({
             : "La de atrás es opcional en calzado y accesorios."
         }
       >
-        <div className="grid grid-cols-2 gap-3">
-          {(["front", "back"] as const).map((side) => {
+        <div className="grid grid-cols-3 gap-2">
+          {SIDES.map((side) => {
             const src = form[FIELD[side]];
             const v = versions[side];
-            const required = side === "front" || needsBack(form.category);
+            const required = side === "front" || (side === "back" && needsBack(form.category));
             return (
               <div key={side}>
                 <label className="card flex aspect-square w-full cursor-pointer items-center justify-center overflow-hidden bg-surface-2">
@@ -172,26 +192,26 @@ export default function GarmentForm({
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={src}
-                      alt={side === "front" ? "Adelante de la prenda" : "Atrás de la prenda"}
+                      alt={side === "front" ? "Adelante de la prenda" : side === "back" ? "Atrás de la prenda" : "Etiqueta de la prenda"}
                       className="h-full w-full object-contain"
                     />
                   ) : (
-                    <span className="p-3 text-center text-sm text-muted">
-                      <span className="mb-1 block text-3xl">{side === "front" ? "📷" : "🔄"}</span>
-                      {side === "front" ? "Tocá para la foto de adelante" : "Tocá para la foto de atrás"}
+                    <span className="p-2 text-center text-xs text-muted">
+                      <span className="mb-1 block text-2xl">{side === "front" ? "📷" : side === "back" ? "🔄" : "🏷️"}</span>
+                      {side === "front" ? "Foto de adelante" : side === "back" ? "Foto de atrás" : "Foto de la etiqueta"}
                     </span>
                   )}
                   <input
-                    ref={side === "front" ? frontRef : backRef}
+                    ref={refs[side]}
                     type="file"
                     accept="image/*"
                     className="sr-only"
-                    aria-label={side === "front" ? "Foto de adelante" : "Foto de atrás"}
+                    aria-label={side === "front" ? "Foto de adelante" : side === "back" ? "Foto de atrás" : "Foto de la etiqueta"}
                     onChange={(e) => onPhoto(side, e.target.files?.[0])}
                   />
                 </label>
                 <p className="mt-1 text-center text-xs font-semibold">
-                  {side === "front" ? "Adelante" : "Atrás"}
+                  {side === "front" ? "Adelante" : side === "back" ? "Atrás" : "Etiqueta"}
                   {!required && <span className="font-normal text-muted"> (opcional)</span>}
                 </p>
                 {v?.clean && src && (
@@ -301,6 +321,32 @@ export default function GarmentForm({
           ))}
         </div>
       </Section>
+
+      <div id="talle">
+        <Section
+          title="Talle"
+          hint={
+            form.photoLabel && ai === "done" && form.size
+              ? "Lo leí de la etiqueta. Si no es, corregilo."
+              : "Escribilo o sacale foto a la etiqueta y lo leo yo."
+          }
+        >
+          <div className="mb-2 flex flex-wrap gap-2">
+            {QUICK_SIZES.map((sz) => (
+              <Chip key={sz} pressed={form.size === sz} onClick={() => update("size", sz)}>
+                {sz}
+              </Chip>
+            ))}
+          </div>
+          <input
+            className="input"
+            value={form.size ?? ""}
+            onChange={(e) => update("size", e.target.value.slice(0, 12))}
+            placeholder="Ej: M, 42, 10, 38/40"
+            aria-label="Talle"
+          />
+        </Section>
+      </div>
 
       <Section title="Nombre (opcional)">
         <input

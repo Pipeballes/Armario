@@ -18,6 +18,14 @@ import {
 const MAX_TOTAL_CHARS = 4_000_000; // Vercel acepta hasta 4.5 MB por pedido
 const MAX_PROFILE_PHOTOS = 15;
 
+const SIDES = ["adelante", "atrás", "etiqueta"];
+
+/** Qué muestra cada foto de la prenda (solo valores conocidos). */
+function garmentSides(raw: unknown, n: number): string {
+  const list = Array.isArray(raw) ? raw.filter((x): x is string => SIDES.includes(x)) : [];
+  return (list.length === n ? list : SIDES.slice(0, n)).join(", ");
+}
+
 function fail(status: number, message: string) {
   return Response.json({ error: message }, { status });
 }
@@ -75,7 +83,7 @@ export async function POST(request: Request) {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? null;
   if (!(await userFromToken(token))) return fail(401, "Iniciá sesión para usar la IA.");
 
-  let body: { kind?: string; image?: string; images?: string[]; choose?: ChooseRequest; gender?: string };
+  let body: { kind?: string; image?: string; images?: string[]; sides?: unknown; choose?: ChooseRequest; gender?: string };
   try {
     body = await request.json();
   } catch {
@@ -100,7 +108,7 @@ export async function POST(request: Request) {
 
   if (body.kind !== "prenda" && body.kind !== "perfil") return fail(400, "Tipo de análisis inválido.");
   const raw = Array.isArray(body.images) ? body.images : body.image ? [body.image] : [];
-  const max = body.kind === "perfil" ? MAX_PROFILE_PHOTOS : 2;
+  const max = body.kind === "perfil" ? MAX_PROFILE_PHOTOS : 3;
   if (raw.length === 0 || raw.length > max) return fail(400, `Mandá entre 1 y ${max} fotos.`);
   if (raw.reduce((n, x) => n + (typeof x === "string" ? x.length : 0), 0) > MAX_TOTAL_CHARS) {
     return fail(413, "Las fotos son muy pesadas. Probá con menos fotos.");
@@ -116,7 +124,7 @@ export async function POST(request: Request) {
   parts.push({
     text: isGarment
       ? parts.length > 1
-        ? `${GARMENT_PROMPT}\n\nTe paso 2 fotos de la MISMA prenda: la primera es la parte de adelante y la segunda la de atrás. Si atrás tiene un estampado o logo grande, contalo como estampado.`
+        ? `${GARMENT_PROMPT}\n\nTe paso ${parts.length} fotos de la MISMA prenda, en este orden: ${garmentSides(body.sides, parts.length)}. Si atrás tiene un estampado o logo grande, contalo como estampado. Si hay una foto de la etiqueta, leé el talle de ahí.`
         : GARMENT_PROMPT
       : parts.length > 1
         ? `${profilePromptFor(body.gender)}\n\nTe paso ${parts.length} fotos de la MISMA persona, con distintos ángulos y luces. Combiná lo que ves en todas para dar una sola respuesta. Si la luz de alguna cambia el color de la piel, confiá más en las que tienen luz natural.`

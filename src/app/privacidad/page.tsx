@@ -30,7 +30,7 @@ export default function PrivacidadPage() {
           <strong>Tu mail</strong>, si creás una cuenta, para mandarte el código de entrada.
         </li>
         <li>
-          <strong>Las fotos de tu ropa</strong> y sus datos (tipo, color, estilo, cuándo la usaste).
+          <strong>Las fotos de tu ropa</strong> (adelante, atrás y etiqueta) y sus datos (tipo, color, estilo, talle, cuándo la usaste).
         </li>
         <li>
           <strong>Tu perfil</strong>: nombre, género, subtono y tono de piel, silueta, altura, estilos, las fotos tuyas que

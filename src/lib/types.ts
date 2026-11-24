@@ -15,6 +15,10 @@ export interface Garment {
   photo: string;
   /** Foto de atrás. */
   photoBack?: string;
+  /** Foto de la etiqueta (de ahí la IA lee el talle). */
+  photoLabel?: string;
+  /** Talle (ej: "M", "42", "Único"). */
+  size?: string;
   name: string;
   category: Category;
   color: string;

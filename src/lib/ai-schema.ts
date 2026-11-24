@@ -25,6 +25,8 @@ export interface GarmentAnalysis {
   styles: StyleId[];
   formality: number;
   warmth: Warmth;
+  /** Talle leído de la etiqueta, si se ve. */
+  size?: string;
 }
 
 export interface ProfileAnalysis {
@@ -55,7 +57,8 @@ export const GARMENT_PROMPT = `Sos un asesor de moda. Mirá la foto de UNA prend
 - pattern: liso o estampado (rayas, cuadros, flores, logos grandes cuentan como estampado).
 - styles: de 1 a 3 estilos que le correspondan.
 - formality: 1 = para estar en casa o hacer deporte, 3 = casual arreglado, 5 = formal (traje, vestido de fiesta).
-- warmth: light (para calor), medium, warm (abriga mucho).`;
+- warmth: light (para calor), medium, warm (abriga mucho).
+- size: el talle SOLO si se lee en una etiqueta (ej: "M", "XL", "42", "10"). Si no se ve, dejalo vacío; no lo adivines.`;
 
 export const GARMENT_SCHEMA = {
   type: "OBJECT",
@@ -67,6 +70,7 @@ export const GARMENT_SCHEMA = {
     styles: { type: "ARRAY", items: { type: "STRING", enum: ids(STYLES) } },
     formality: { type: "INTEGER" },
     warmth: { type: "STRING", enum: ids(WARMTH) },
+    size: { type: "STRING", nullable: true },
   },
   required: ["name", "category", "color", "pattern", "styles", "formality", "warmth"],
 };
@@ -126,7 +130,15 @@ export function parseGarment(raw: unknown): GarmentAnalysis | null {
     styles: styles.length ? styles : ["casual"],
     formality: Number.isFinite(f) ? Math.min(5, Math.max(1, f)) : 2,
     warmth,
+    size: parseSize(r.size),
   };
+}
+
+/** Talle tal como figura en la etiqueta (corto y sin texto de más). */
+export function parseSize(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const s = raw.replace(/^\s*talle\s*:?\s*/i, "").trim().slice(0, 12);
+  return s && !/^(null|n\/?a|desconocido|no se ve)$/i.test(s) ? s.toUpperCase() : undefined;
 }
 
 /** Valida la respuesta de la IA para el perfil. */

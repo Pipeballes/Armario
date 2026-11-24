@@ -101,7 +101,10 @@ export default function ArmarioPage() {
                     <Swatch colorId={g.color} size={10} />
                     <span className="truncate">{g.name}</span>
                   </p>
-                  <p className="text-xs text-muted">{colorById(g.color).label}</p>
+                  <p className="text-xs text-muted">
+                    {colorById(g.color).label}
+                    {g.size ? ` · Talle ${g.size}` : ""}
+                  </p>
                 </button>
               </li>
             ))}

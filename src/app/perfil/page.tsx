@@ -71,6 +71,7 @@ export default function PerfilPage() {
             ...g,
             photo: await toData(g.photo),
             photoBack: g.photoBack ? await toData(g.photoBack) : undefined,
+            photoLabel: g.photoLabel ? await toData(g.photoLabel) : undefined,
           }))),
       };
     } catch {
