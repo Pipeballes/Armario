@@ -45,15 +45,17 @@ export default function ProfileAnalysis() {
     );
   }
 
-  async function addPhotos(files: FileList | null) {
-    if (!files?.length) return;
+  async function addPhotos(list: FileList | null) {
+    // Copia: el navegador vacía la lista cuando se resetea el campo.
+    const files = list ? [...list] : [];
+    if (!files.length) return;
     setMsg(null);
     setResult(null);
     const room = MAX_PHOTOS - photos.length;
     if (room <= 0) return;
     try {
       // Fotos más chicas para que entren varias en un solo envío.
-      const added = await Promise.all([...files].slice(0, room).map((f) => resizePhoto(f, 800).then((r) => r.dataUrl)));
+      const added = await Promise.all(files.slice(0, room).map((f) => resizePhoto(f, 800).then((r) => r.dataUrl)));
       setPhotos((p) => [...p, ...added].slice(0, MAX_PHOTOS));
       if (files.length > room) setMsg(`Hasta ${MAX_PHOTOS} fotos: usé las primeras.`);
     } catch {
