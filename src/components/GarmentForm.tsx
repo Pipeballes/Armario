@@ -5,7 +5,10 @@ import {
   CATEGORIES,
   COLORS,
   FORMALITY_LABELS,
+  KINDS,
   SPORTS,
+  kindById,
+  kindsFor,
   STYLES,
   WARMTH,
   type Category,
@@ -24,18 +27,36 @@ const DEFAULT_FORMALITY: Record<Category, number> = {
   shoes: 2,
   outerwear: 3,
   accessory: 2,
+  pijama: 1,
+  interior: 1,
+  malla: 1,
 };
 
-/** Prendas que necesitan foto de atrás (en calzado y accesorios es opcional). */
+/** Prendas que necesitan foto de atrás (en el resto es opcional). */
 export const needsBack = (c: Category) => c === "top" || c === "bottom" || c === "dress" || c === "outerwear";
 
 type Side = "front" | "back" | "label";
-const FIELD = { front: "photo", back: "photoBack", label: "photoLabel" } as const;
-const AI_SIDE: Record<Side, GarmentSide> = { front: "adelante", back: "atrás", label: "etiqueta" };
+const FIELD = {
+  front: "photo",
+  back: "photoBack",
+  label: "photoLabel",
+} as const;
+const AI_SIDE: Record<Side, GarmentSide> = {
+  front: "adelante",
+  back: "atrás",
+  label: "etiqueta",
+};
 const SIDES: Side[] = ["front", "back", "label"];
 
 /** Talles más comunes, para tocar en vez de escribir. */
 const QUICK_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "Único"];
+
+/** Nombre del tipo (ej: "Short de pijama", o lo que escribiste si es "otro"). */
+function kindLabel(f: Pick<Garment, "category" | "kind" | "kindDetail">): string | null {
+  if (!KINDS[f.category] || !f.kind) return null;
+  const base = f.kind === "otro" ? f.kindDetail?.trim() || "Prenda" : (kindById(f.category, f.kind)?.label ?? "Prenda");
+  return f.category === "pijama" ? `${base} de pijama` : base;
+}
 
 function blank(): Omit<Garment, "id" | "createdAt"> {
   return {
@@ -77,7 +98,10 @@ export default function GarmentForm({
 
   /** Fotos para la IA, en orden: adelante, atrás, etiqueta (las que haya). */
   const photosFor = (f: typeof form) =>
-    SIDES.filter((side) => f[FIELD[side]]).map((side) => ({ src: f[FIELD[side]]!, side: AI_SIDE[side] }));
+    SIDES.filter((side) => f[FIELD[side]]).map((side) => ({
+      src: f[FIELD[side]]!,
+      side: AI_SIDE[side],
+    }));
 
   /** onlySize: la IA ya completó todo; solo se toma el talle (para no pisar lo que corregiste). */
   async function analyze(next: typeof form, onlySize = false) {
@@ -108,7 +132,11 @@ export default function GarmentForm({
         next.color = guessColor(canvas);
         setColorGuessed(true);
       }
-      setForm((f) => ({ ...f, [FIELD[side]]: dataUrl, ...(side === "front" ? { color: next.color } : {}) }));
+      setForm((f) => ({
+        ...f,
+        [FIELD[side]]: dataUrl,
+        ...(side === "front" ? { color: next.color } : {}),
+      }));
       if (ai === "working") return;
       if (side === "front") await analyze(next);
       else if (ai !== "done") await analyze(next);
@@ -144,6 +172,14 @@ export default function GarmentForm({
       setError("Falta la foto de atrás de la prenda (dala vuelta y sacale otra).");
       return;
     }
+    if (KINDS[form.category] && !form.kind) {
+      setError("Elegí qué prenda es (remera, short, medias…).");
+      return;
+    }
+    if (form.kind === "otro" && !form.kindDetail?.trim()) {
+      setError("Escribí qué prenda es.");
+      return;
+    }
     if (!form.size?.trim()) {
       setError("Falta el talle. Escribilo o sacale foto a la etiqueta.");
       document.getElementById("talle")?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -155,12 +191,21 @@ export default function GarmentForm({
       ...form,
       id: initial?.id ?? newId(),
       createdAt: initial?.createdAt ?? Date.now(),
-      name: form.name.trim() || `${cat.label} ${COLORS.find((c) => c.id === form.color)?.label.toLowerCase()}`,
+      name:
+        form.name.trim() ||
+        `${kindLabel(form) ?? cat.label} ${COLORS.find((c) => c.id === form.color)?.label.toLowerCase()}`,
+      sport: KINDS[form.category] ? undefined : form.sport,
+      kind: KINDS[form.category] ? form.kind : undefined,
+      kindDetail: form.kind === "otro" ? form.kindDetail?.trim() : undefined,
     };
     try {
       await actions.saveGarment(garment);
       if (another) {
-        setForm({ ...blank(), category: form.category, formality: DEFAULT_FORMALITY[form.category] });
+        setForm({
+          ...blank(),
+          category: form.category,
+          formality: DEFAULT_FORMALITY[form.category],
+        });
         setColorGuessed(false);
         setVersions({});
         setAi("idle");
@@ -188,7 +233,7 @@ export default function GarmentForm({
         hint={
           needsBack(form.category)
             ? "Sacale una de adelante y otra de atrás (dala vuelta), sobre un fondo liso."
-            : "La de atrás es opcional en calzado y accesorios."
+            : "La de atrás es opcional en este tipo de prenda."
         }
       >
         <div className="grid grid-cols-3 gap-2">
@@ -203,13 +248,25 @@ export default function GarmentForm({
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={src}
-                      alt={side === "front" ? "Adelante de la prenda" : side === "back" ? "Atrás de la prenda" : "Etiqueta de la prenda"}
+                      alt={
+                        side === "front"
+                          ? "Adelante de la prenda"
+                          : side === "back"
+                            ? "Atrás de la prenda"
+                            : "Etiqueta de la prenda"
+                      }
                       className="h-full w-full object-contain"
                     />
                   ) : (
                     <span className="p-2 text-center text-xs text-muted">
-                      <span className="mb-1 block text-2xl">{side === "front" ? "📷" : side === "back" ? "🔄" : "🏷️"}</span>
-                      {side === "front" ? "Foto de adelante" : side === "back" ? "Foto de atrás" : "Foto de la etiqueta"}
+                      <span className="mb-1 block text-2xl">
+                        {side === "front" ? "📷" : side === "back" ? "🔄" : "🏷️"}
+                      </span>
+                      {side === "front"
+                        ? "Foto de adelante"
+                        : side === "back"
+                          ? "Foto de atrás"
+                          : "Foto de la etiqueta"}
                     </span>
                   )}
                   <input
@@ -217,7 +274,9 @@ export default function GarmentForm({
                     type="file"
                     accept="image/*"
                     className="sr-only"
-                    aria-label={side === "front" ? "Foto de adelante" : side === "back" ? "Foto de atrás" : "Foto de la etiqueta"}
+                    aria-label={
+                      side === "front" ? "Foto de adelante" : side === "back" ? "Foto de atrás" : "Foto de la etiqueta"
+                    }
                     onChange={(e) => onPhoto(side, e.target.files?.[0])}
                   />
                 </label>
@@ -254,23 +313,49 @@ export default function GarmentForm({
 
       <Section title="¿Qué es?">
         <div className="flex flex-wrap gap-2">
-          {CATEGORIES.filter((c) => c.id !== "dress" || profile.gender !== "hombre" || form.category === "dress").map((c) => (
-            <Chip
-              key={c.id}
-              pressed={form.category === c.id}
-              onClick={() =>
-                setForm((f) => ({
-                  ...f,
-                  category: c.id,
-                  formality: initial ? f.formality : DEFAULT_FORMALITY[c.id],
-                }))
-              }
-            >
-              <span aria-hidden>{c.emoji}</span> {c.label}
-            </Chip>
-          ))}
+          {CATEGORIES.filter((c) => c.id !== "dress" || profile.gender !== "hombre" || form.category === "dress").map(
+            (c) => (
+              <Chip
+                key={c.id}
+                pressed={form.category === c.id}
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    category: c.id,
+                    formality: initial ? f.formality : DEFAULT_FORMALITY[c.id],
+                    kind: kindById(c.id, f.kind) ? f.kind : undefined,
+                  }))
+                }
+              >
+                <span aria-hidden>{c.emoji}</span> {c.label}
+              </Chip>
+            ),
+          )}
         </div>
       </Section>
+
+      {KINDS[form.category] && (
+        <Section
+          title={`¿Qué prenda de ${form.category === "pijama" ? "pijama" : form.category === "malla" ? "malla" : "ropa interior"} es?`}
+        >
+          <div className="flex flex-wrap gap-2">
+            {kindsFor(form.category, profile.gender).map((k) => (
+              <Chip key={k.id} pressed={form.kind === k.id} onClick={() => update("kind", k.id)}>
+                {k.label}
+              </Chip>
+            ))}
+          </div>
+          {form.kind === "otro" && (
+            <input
+              className="input mt-2"
+              value={form.kindDetail ?? ""}
+              onChange={(e) => update("kindDetail", e.target.value.slice(0, 40))}
+              placeholder="¿Qué es? Ej: bata, pantuflas, antifaz"
+              aria-label="Qué prenda es"
+            />
+          )}
+        </Section>
+      )}
 
       <Section
         title="Color principal"
@@ -296,28 +381,32 @@ export default function GarmentForm({
         </div>
       </Section>
 
-      <Section title="¿Es deportiva?">
-        <div className="flex gap-2">
-          <Chip pressed={!form.sport} onClick={() => setSport(undefined)}>
-            No
-          </Chip>
-          <Chip pressed={Boolean(form.sport)} onClick={() => setSport(form.sport || "general")}>
-            🏃 Sí, es deportiva
-          </Chip>
-        </div>
-        {form.sport && (
-          <>
-            <p className="mt-3 mb-2 text-sm text-muted">¿Para qué deporte? Así la uso cuando tengas ese deporte en la agenda.</p>
-            <div className="flex flex-wrap gap-2">
-              {SPORTS.map((sp) => (
-                <Chip key={sp.id} pressed={form.sport === sp.id} onClick={() => setSport(sp.id)}>
-                  <span aria-hidden>{sp.emoji}</span> {sp.label}
-                </Chip>
-              ))}
-            </div>
-          </>
-        )}
-      </Section>
+      {!KINDS[form.category] && (
+        <Section title="¿Es deportiva?">
+          <div className="flex gap-2">
+            <Chip pressed={!form.sport} onClick={() => setSport(undefined)}>
+              No
+            </Chip>
+            <Chip pressed={Boolean(form.sport)} onClick={() => setSport(form.sport || "general")}>
+              🏃 Sí, es deportiva
+            </Chip>
+          </div>
+          {form.sport && (
+            <>
+              <p className="mt-3 mb-2 text-sm text-muted">
+                ¿Para qué deporte? Así la uso cuando tengas ese deporte en la agenda.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {SPORTS.map((sp) => (
+                  <Chip key={sp.id} pressed={form.sport === sp.id} onClick={() => setSport(sp.id)}>
+                    <span aria-hidden>{sp.emoji}</span> {sp.label}
+                  </Chip>
+                ))}
+              </div>
+            </>
+          )}
+        </Section>
+      )}
 
       <Section title="Estilo" hint="Podés elegir más de uno.">
         <div className="flex flex-wrap gap-2">

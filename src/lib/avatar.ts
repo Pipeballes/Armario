@@ -1,6 +1,6 @@
 // Datos del avatar 3D: proporciones del cuerpo según el perfil, color de piel y qué prenda va en cada lugar.
 
-import { colorById, type BodyType } from "./catalog";
+import { KINDS, colorById, kindById, type BodyType } from "./catalog";
 import type { AvatarStyle, Garment, Profile } from "./types";
 
 export interface BodyDims {
@@ -61,8 +61,10 @@ export const SLOTS: { id: Slot; label: string; emoji: string }[] = [
 ];
 
 /** En qué lugar del avatar va cada prenda (los vestidos van "arriba" y tapan lo de abajo). */
-export function slotOf(g: Garment): Slot {
+export function slotOf(g: Garment): Slot | null {
   if (g.category === "dress") return "top";
+  // Pijama, ropa interior y malla: según el tipo (remera arriba, short abajo, medias en ningún lado).
+  if (KINDS[g.category]) return kindById(g.category, g.kind)?.slot ?? null;
   return g.category as Slot;
 }
 
@@ -71,7 +73,10 @@ export type Selection = Partial<Record<Slot, string>>;
 /** Arma la selección a partir de una lista de prendas (ej: un outfit sugerido). */
 export function selectionFrom(items: Garment[]): Selection {
   const sel: Selection = {};
-  for (const g of items) sel[slotOf(g)] = g.id;
+  for (const g of items) {
+    const slot = slotOf(g);
+    if (slot) sel[slot] = g.id;
+  }
   return sel;
 }
 

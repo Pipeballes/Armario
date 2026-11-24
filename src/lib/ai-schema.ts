@@ -4,6 +4,7 @@ import {
   BODY_TYPES,
   CATEGORIES,
   COLORS,
+  KINDS,
   SKIN_DEPTHS,
   SPORTS,
   STYLES,
@@ -18,6 +19,8 @@ import {
   type Warmth,
 } from "./catalog";
 
+const ALL_KIND_IDS = [...new Set(Object.values(KINDS).flatMap((list) => (list ?? []).map((k) => k.id)))];
+
 export interface GarmentAnalysis {
   name: string;
   category: Category;
@@ -30,6 +33,8 @@ export interface GarmentAnalysis {
   size?: string;
   /** Si es ropa deportiva, de qué deporte. */
   sport?: string;
+  /** Tipo dentro de pijama / ropa interior / malla. */
+  kind?: string;
 }
 
 export interface ProfileAnalysis {
@@ -55,7 +60,8 @@ const ids = <T extends { id: string }>(xs: readonly T[]) => xs.map((x) => x.id);
 
 export const GARMENT_PROMPT = `Sos un asesor de moda. Mirá la foto de UNA prenda y clasificala.
 - name: nombre corto en español rioplatense (ej: "Remera blanca básica", "Jean azul recto").
-- category: top (remeras, camisas, buzos, sweaters), bottom (pantalones, shorts, polleras), dress (vestidos, enteritos), shoes, outerwear (camperas, tapados, sacos), accessory (gorras, cinturones, bolsos, bufandas).
+- category: top (remeras, camisas, buzos, sweaters), bottom (pantalones, shorts, polleras), dress (vestidos, enteritos), shoes, outerwear (camperas, tapados, sacos), accessory (gorras, cinturones, bolsos, bufandas), pijama (ropa de dormir), interior (calzoncillos, bombachas, corpiños, medias), malla (traje de baño).
+- kind: solo si category es pijama, interior o malla: qué prenda es (ej: remera, short, calzoncillo, bombacha, corpino, medias, short-bano, bikini-arriba, enteriza). Si no, "ninguno".
 - color: el color principal de la prenda (no del fondo), el más cercano de la lista.
 - pattern: liso o estampado (rayas, cuadros, flores, logos grandes cuentan como estampado).
 - styles: de 1 a 3 estilos que le correspondan.
@@ -76,6 +82,7 @@ export const GARMENT_SCHEMA = {
     warmth: { type: "STRING", enum: ids(WARMTH) },
     size: { type: "STRING", nullable: true },
     sport: { type: "STRING", enum: ["ninguno", ...SPORTS.map((x) => x.id)] },
+    kind: { type: "STRING", enum: ["ninguno", ...ALL_KIND_IDS] },
   },
   required: ["name", "category", "color", "pattern", "styles", "formality", "warmth"],
 };
@@ -136,7 +143,10 @@ export function parseGarment(raw: unknown): GarmentAnalysis | null {
     formality: Number.isFinite(f) ? Math.min(5, Math.max(1, f)) : 2,
     warmth,
     size: parseSize(r.size),
-    sport: pick<string>(r.sport, SPORTS.map((x) => x.id)) ?? undefined,
+    sport: KINDS[category] ? undefined : (pick<string>(r.sport, SPORTS.map((x) => x.id)) ?? undefined),
+    kind: KINDS[category]
+      ? (pick<string>(r.kind, (KINDS[category] ?? []).map((k) => k.id)) ?? undefined)
+      : undefined,
   };
 }
 

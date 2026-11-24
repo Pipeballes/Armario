@@ -21,6 +21,10 @@ export interface Garment {
   size?: string;
   /** Si es deportiva: id de SPORTS ("general" = para cualquier deporte). */
   sport?: string;
+  /** Tipo dentro de pijama / ropa interior / malla (id de KINDS). */
+  kind?: string;
+  /** Si el tipo es "otro": qué es (escrito). */
+  kindDetail?: string;
   name: string;
   category: Category;
   color: string;

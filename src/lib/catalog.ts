@@ -1,7 +1,7 @@
 // Catálogo de opciones: categorías, colores, estilos, ocasiones y perfil.
 // Todo el texto visible está en español porque la app es en español.
 
-export type Category = "top" | "bottom" | "dress" | "shoes" | "outerwear" | "accessory";
+export type Category = "top" | "bottom" | "dress" | "shoes" | "outerwear" | "accessory" | "pijama" | "interior" | "malla";
 export type Warmth = "light" | "medium" | "warm";
 export type Pattern = "liso" | "estampado";
 export type Temp = "warm" | "cool" | "neutral";
@@ -14,7 +14,68 @@ export const CATEGORIES: { id: Category; label: string; plural: string; emoji: s
   { id: "shoes", label: "Calzado", plural: "Calzado", emoji: "👟" },
   { id: "outerwear", label: "Abrigo", plural: "Abrigos", emoji: "🧥" },
   { id: "accessory", label: "Accesorio", plural: "Accesorios", emoji: "🧢" },
+  { id: "pijama", label: "Pijama", plural: "Pijamas", emoji: "🛌" },
+  { id: "interior", label: "Ropa interior", plural: "Ropa interior", emoji: "🩲" },
+  { id: "malla", label: "Malla", plural: "Mallas", emoji: "🩱" },
 ];
+
+/** Categorías que no entran en los outfits de todos los días. */
+export const SPECIAL_CATEGORIES: Category[] = ["pijama", "interior", "malla"];
+
+type KindGender = "hombre" | "mujer";
+/** Dónde va en el avatar: arriba, abajo o ninguno. */
+type KindSlot = "top" | "bottom" | "outerwear" | "accessory" | null;
+export interface KindDef {
+  id: string;
+  label: string;
+  /** Si es solo para un género (si no elegiste género, se muestran todas). */
+  only?: KindGender;
+  slot: KindSlot;
+}
+
+const UNDERWEAR: KindDef[] = [
+  { id: "calzoncillo", label: "Calzoncillo / bóxer", only: "hombre", slot: "bottom" },
+  { id: "bombacha", label: "Bombacha", only: "mujer", slot: "bottom" },
+  { id: "corpino", label: "Corpiño", only: "mujer", slot: "top" },
+  { id: "top-interior", label: "Top / bralette", only: "mujer", slot: "top" },
+  { id: "camiseta", label: "Camiseta", slot: "top" },
+  { id: "medias", label: "Medias", slot: null },
+];
+
+const SWIM: KindDef[] = [
+  { id: "short-bano", label: "Short de baño", slot: "bottom" },
+  { id: "bikini-arriba", label: "Bikini (arriba)", only: "mujer", slot: "top" },
+  { id: "bikini-abajo", label: "Bikini (abajo)", only: "mujer", slot: "bottom" },
+  { id: "enteriza", label: "Malla enteriza", only: "mujer", slot: "top" },
+  { id: "remera-uv", label: "Remera de agua / UV", slot: "top" },
+];
+
+const OTHER: KindDef = { id: "otro", label: "Otro", slot: null };
+
+/** Qué tipo de prenda es dentro de cada categoría especial. */
+export const KINDS: Partial<Record<Category, KindDef[]>> = {
+  pijama: [
+    { id: "remera", label: "Remera", slot: "top" },
+    { id: "short", label: "Short", slot: "bottom" },
+    { id: "pantalon", label: "Pantalón", slot: "bottom" },
+    { id: "buzo", label: "Buzo", slot: "outerwear" },
+    { id: "camison", label: "Camisón", only: "mujer", slot: "top" },
+    ...UNDERWEAR,
+    { id: "accesorio", label: "Accesorio", slot: "accessory" },
+    OTHER,
+  ],
+  interior: [...UNDERWEAR, OTHER],
+  malla: [...SWIM, OTHER],
+};
+
+/** Tipos para mostrar según el género (sin género o "otro": todos). */
+export function kindsFor(category: Category, gender: string | null | undefined): KindDef[] {
+  const list = KINDS[category] ?? [];
+  if (gender !== "hombre" && gender !== "mujer") return list;
+  return list.filter((k) => !k.only || k.only === gender);
+}
+
+export const kindById = (category: Category, id: string | undefined) => KINDS[category]?.find((k) => k.id === id);
 
 export interface ColorDef {
   id: string;
