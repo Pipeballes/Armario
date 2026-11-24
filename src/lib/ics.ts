@@ -24,9 +24,17 @@ export function eventsFromIcs(body: string, from: Date, to: Date): AgendaEvent[]
       continue;
     }
     for (const inst of instances) {
-      const start = new Date(inst.start);
+      let start = new Date(inst.start);
       if (Number.isNaN(start.getTime())) continue;
-      const end = inst.end ? new Date(inst.end) : null;
+      let end = inst.end ? new Date(inst.end) : null;
+      if (inst.isFullDay) {
+        // Un día completo no tiene hora: se guarda al mediodía UTC de esa fecha, así en
+        // cualquier zona horaria (de UTC-11 a UTC+11) se ve en el día correcto.
+        const d = new Date(inst.start as Date);
+        const y = d.getFullYear(), m = d.getMonth(), day = d.getDate();
+        start = new Date(Date.UTC(y, m, day, 12));
+        end = null;
+      }
       if ((end ?? start) < from || start > to) continue;
       const title = text(inst.summary).trim() || "(Sin título)";
       out.push({

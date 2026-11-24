@@ -70,7 +70,9 @@ describe("eventsFromIcs", () => {
     expect(meeting.start).toBe("2026-11-26T13:00:00.000Z");
     expect(meeting.occasion).toBe("trabajo");
     expect(meeting.location).toBe("Oficina");
-    expect(events.find((e) => e.title === "Casamiento de Sofi")!.allDay).toBe(true);
+    const boda = events.find((e) => e.title === "Casamiento de Sofi")!;
+    expect(boda.allDay).toBe(true);
+    expect(boda.start).toBe("2026-11-28T12:00:00.000Z");
     expect(events.find((e) => e.title === "Gym")!.start).toBe("2026-11-24T22:00:00.000Z");
   });
 });

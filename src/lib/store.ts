@@ -38,6 +38,7 @@ let cloud: Cloud | null = null;
 const listeners = new Set<() => void>();
 let started = false;
 let loadToken = 0;
+let profileQueue: Promise<void> = Promise.resolve();
 
 function set(next: Partial<State>) {
   state = { ...state, ...next };
@@ -127,9 +128,20 @@ export const actions = {
     if (!cloud) await Promise.all(updated.filter((g) => ids.includes(g.id)).map((g) => db.saveGarment(g)));
     set({ garments: updated });
   },
-  async saveProfile(p: Profile) {
-    const shown = cloud ? await cloud.saveProfile(p) : (await db.saveProfile(p), p);
-    set({ profile: shown });
+  /**
+   * Guarda el perfil. La pantalla se actualiza al instante y los guardados se mandan de a uno,
+   * en orden, para que un cambio rápido no pise a otro que todavía estaba viajando.
+   */
+  saveProfile(p: Profile): Promise<void> {
+    set({ profile: p });
+    const run = profileQueue.then(async () => {
+      const target = cloud;
+      const shown = target ? await target.saveProfile(p) : (await db.saveProfile(p), p);
+      // Solo se reemplaza si nadie cambió el perfil mientras tanto (fotos nuevas → links firmados).
+      if (state.profile === p) set({ profile: shown });
+    });
+    profileQueue = run.catch(() => {});
+    return run;
   },
   /** Reemplaza todo por una copia de seguridad (en el lugar donde se esté guardando). */
   async replaceAll(garments: Garment[], profile: Profile) {

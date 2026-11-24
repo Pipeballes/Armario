@@ -1,5 +1,6 @@
 import type {
   BodyType,
+  OccasionId,
   Category,
   Pattern,
   SkinDepth,
@@ -49,6 +50,8 @@ export interface CalendarLink {
   /** Color en formato #rrggbb (el del calendario del iPhone, o el que elijas). */
   color: string;
   url: string;
+  /** Ocasión para los eventos que no dicen qué son (ej: todo lo de "Trabajo" es facu). */
+  defaultOccasion?: OccasionId;
 }
 
 /** Todos los calendarios del perfil, incluido el link viejo si había uno solo. */

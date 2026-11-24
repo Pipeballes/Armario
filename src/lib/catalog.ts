@@ -101,7 +101,7 @@ export interface Occasion {
 
 export const OCCASIONS: Occasion[] = [
   { id: "casual", label: "Día casual", emoji: "☀️", formality: [1, 3], styles: ["casual", "urbano", "minimalista"] },
-  { id: "trabajo", label: "Trabajo / oficina", emoji: "💼", formality: [3, 4], styles: ["clasico", "minimalista", "elegante"] },
+  { id: "trabajo", label: "Trabajo / facu", emoji: "💼", formality: [3, 4], styles: ["clasico", "minimalista", "elegante"] },
   { id: "cita", label: "Cita", emoji: "❤️", formality: [2, 4], styles: ["elegante", "minimalista", "clasico", "casual"] },
   { id: "noche", label: "Salir de noche", emoji: "🌙", formality: [2, 4], styles: ["urbano", "rockero", "elegante"] },
   { id: "formal", label: "Evento formal", emoji: "🥂", formality: [4, 5], styles: ["elegante", "clasico"] },

@@ -6,11 +6,16 @@ import { fetchCalendar } from "@/lib/agenda-client";
 import { actions, newId, useArmario } from "@/lib/store";
 import { cloudEnabled } from "@/lib/supabase";
 import { calendarsOf, type CalendarLink } from "@/lib/types";
+import { OCCASIONS, type OccasionId } from "@/lib/catalog";
 
 type Source = "iphone" | "google";
 
 /** Colores parecidos a los del calendario del iPhone, para elegir si el link no trae uno. */
 const COLORS = ["#ff3b30", "#ff9500", "#ffcc00", "#34c759", "#007aff", "#af52de", "#a2845e", "#8e8e93"];
+
+/** Calendario público de feriados de Argentina (Google). */
+const FERIADOS_AR =
+  "https://calendar.google.com/calendar/ical/es.ar%23holiday%40group.v.calendar.google.com/public/basic.ics";
 
 export default function CalendarSection() {
   const { account, profile } = useArmario();
@@ -41,10 +46,10 @@ export default function CalendarSection() {
     await actions.saveProfile({ ...profile, calendarUrl: undefined, calendars: list });
   }
 
-  async function connect() {
+  async function connect(fixed?: { url: string; name: string; defaultOccasion?: OccasionId }) {
     setMsg(null);
     setPreview(null);
-    const url = link.trim();
+    const url = (fixed?.url ?? link).trim();
     if (!normalizeCalendarUrl(url)) {
       setMsg("Ese link no parece de un calendario. Tiene que empezar con webcal:// o https:// (de iCloud o Google).");
       return;
@@ -59,9 +64,10 @@ export default function CalendarSection() {
       const used = new Set(calendars.map((c) => c.color));
       const cal: CalendarLink = {
         id: newId(),
-        name: calendar.name || `Calendario ${calendars.length + 1}`,
+        name: fixed?.name || calendar.name || `Calendario ${calendars.length + 1}`,
         color: calendar.color || COLORS.find((c) => !used.has(c)) || COLORS[0],
         url,
+        ...(fixed?.defaultOccasion ? { defaultOccasion: fixed.defaultOccasion } : {}),
       };
       await saveCalendars([...calendars, cal]);
       setPreview({ name: cal.name, events });
@@ -87,35 +93,55 @@ export default function CalendarSection() {
       {calendars.length > 0 && (
         <ul className="mb-3 space-y-2">
           {calendars.map((c) => (
-            <li key={c.id} className="flex items-center gap-2 rounded-xl border border-line p-2">
-              <label className="relative h-7 w-7 shrink-0 cursor-pointer" title="Cambiar color">
-                <span className="block h-7 w-7 rounded-full border border-black/10" style={{ background: c.color }} />
+            <li key={c.id} className="rounded-xl border border-line p-2">
+              <div className="flex items-center gap-2">
+                <label className="relative h-7 w-7 shrink-0 cursor-pointer" title="Cambiar color">
+                  <span className="block h-7 w-7 rounded-full border border-black/10" style={{ background: c.color }} />
+                  <input
+                    type="color"
+                    value={c.color}
+                    onChange={(e) => update(c.id, { color: e.target.value })}
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    aria-label={`Color de ${c.name}`}
+                  />
+                </label>
                 <input
-                  type="color"
-                  value={c.color}
-                  onChange={(e) => update(c.id, { color: e.target.value })}
-                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                  aria-label={`Color de ${c.name}`}
+                  className="min-w-0 flex-1 bg-transparent px-1 py-1 text-sm font-medium outline-none focus:underline"
+                  defaultValue={c.name}
+                  aria-label="Nombre del calendario"
+                  onBlur={(e) => {
+                    const name = e.target.value.trim();
+                    if (name && name !== c.name) update(c.id, { name });
+                  }}
                 />
+                <button
+                  type="button"
+                  className="shrink-0 px-2 text-sm text-danger"
+                  onClick={async () => {
+                    if (confirm(`¿Desconectar "${c.name}"?`)) await saveCalendars(calendars.filter((x) => x.id !== c.id));
+                  }}
+                >
+                  Quitar
+                </button>
+              </div>
+              <label className="mt-1 flex items-center gap-2 pl-9 text-xs text-muted">
+                Si el evento no dice qué es, tomalo como:
+                <select
+                  className="rounded-lg border border-line bg-surface px-2 py-1 text-xs text-ink"
+                  value={c.defaultOccasion ?? ""}
+                  aria-label={`Ocasión por defecto de ${c.name}`}
+                  onChange={(e) =>
+                    update(c.id, { defaultOccasion: (e.target.value || undefined) as OccasionId | undefined })
+                  }
+                >
+                  <option value="">Adivinar por el nombre</option>
+                  {OCCASIONS.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.emoji} {o.label}
+                    </option>
+                  ))}
+                </select>
               </label>
-              <input
-                className="min-w-0 flex-1 bg-transparent px-1 py-1 text-sm font-medium outline-none focus:underline"
-                defaultValue={c.name}
-                aria-label="Nombre del calendario"
-                onBlur={(e) => {
-                  const name = e.target.value.trim();
-                  if (name && name !== c.name) update(c.id, { name });
-                }}
-              />
-              <button
-                type="button"
-                className="shrink-0 px-2 text-sm text-danger"
-                onClick={async () => {
-                  if (confirm(`¿Desconectar "${c.name}"?`)) await saveCalendars(calendars.filter((x) => x.id !== c.id));
-                }}
-              >
-                Quitar
-              </button>
             </li>
           ))}
         </ul>
@@ -138,9 +164,22 @@ export default function CalendarSection() {
       )}
 
       {!adding && (
-        <button type="button" className={calendars.length ? "btn-ghost w-full" : "btn-primary w-full"} onClick={() => setAdding(true)}>
-          {calendars.length ? "＋ Agregar otro calendario" : "Conectar un calendario"}
-        </button>
+        <div className="flex flex-col gap-2">
+          <button type="button" className={calendars.length ? "btn-ghost w-full" : "btn-primary w-full"} onClick={() => setAdding(true)}>
+            {calendars.length ? "＋ Agregar otro calendario" : "Conectar un calendario"}
+          </button>
+          {!calendars.some((c) => c.url === FERIADOS_AR) && (
+            <button
+              type="button"
+              className="text-sm text-accent underline disabled:opacity-50"
+              disabled={busy}
+              onClick={() => connect({ url: FERIADOS_AR, name: "Feriados de Argentina" })}
+            >
+              {busy ? "Conectando…" : "＋ Sumar los feriados de Argentina"}
+            </button>
+          )}
+          {msg && <p className="text-sm text-danger">{msg}</p>}
+        </div>
       )}
 
       {adding && (
@@ -168,16 +207,27 @@ export default function CalendarSection() {
               <li>Pegalo acá abajo. Repetí con cada calendario que quieras sumar.</li>
             </ol>
           ) : (
-            <ol className="mb-3 list-decimal space-y-1 pl-5 text-sm">
-              <li>
-                En la compu, abrí <strong>calendar.google.com</strong> → ⚙️ <strong>Configuración</strong>.
-              </li>
-              <li>A la izquierda, elegí el calendario.</li>
-              <li>
-                Bajá hasta <strong>Dirección secreta en formato iCal</strong> y copiala.
-              </li>
-              <li>Pegala acá abajo.</li>
-            </ol>
+            <>
+              <ol className="mb-2 list-decimal space-y-1 pl-5 text-sm">
+                <li>
+                  En la compu, abrí <strong>calendar.google.com</strong> con la cuenta de ese calendario.
+                </li>
+                <li>
+                  ⚙️ <strong>Configuración</strong> → a la izquierda, en <strong>Configuración de mis calendarios</strong>,
+                  tocá el calendario.
+                </li>
+                <li>
+                  Andá a <strong>Integrar el calendario</strong> y copiá la{" "}
+                  <strong>Dirección secreta en formato iCal</strong>.
+                </li>
+                <li>Pegala acá abajo. Repetí con cada calendario de Google.</li>
+              </ol>
+              <p className="mb-3 text-xs text-muted">
+                ¿Tenés más de una cuenta de Gmail? Cambiá de cuenta arriba a la derecha en Google Calendar y repetí. Los
+                calendarios que te compartió otra persona (como &quot;Familia&quot;) a veces no muestran la dirección
+                secreta: en ese caso la tiene que copiar quien lo creó.
+              </p>
+            </>
           )}
 
           <p className="mb-3 rounded-xl bg-surface-2 p-3 text-xs text-muted">

@@ -44,7 +44,9 @@ export async function fetchAgenda(
       return;
     }
     for (const e of r.value.events) {
-      events.push({ ...e, id: `${cal.id}:${e.id}`, calendarName: cal.name, calendarColor: cal.color });
+      // Si el nombre del evento no dice qué es, se usa la ocasión elegida para ese calendario.
+      const occasion = e.occasion === "casual" && cal.defaultOccasion ? cal.defaultOccasion : e.occasion;
+      events.push({ ...e, occasion, id: `${cal.id}:${e.id}`, calendarName: cal.name, calendarColor: cal.color });
     }
   });
   events.sort((a, b) => a.start.localeCompare(b.start));
