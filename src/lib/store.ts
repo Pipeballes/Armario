@@ -171,6 +171,16 @@ export const actions = {
     });
     if (error) throw error;
   },
+  /** Entra con el código que llegó por mail (sirve en cualquier dispositivo y en la app instalada). */
+  async verifyCode(email: string, code: string): Promise<void> {
+    const sb = getSupabase();
+    if (!sb) throw new Error("La nube no está configurada.");
+    const token = code.replace(/\D/g, "");
+    // "email" sirve para el mail de entrada; "signup" para el primer mail de confirmación.
+    let { error } = await sb.auth.verifyOtp({ email, token, type: "email" });
+    if (error) ({ error } = await sb.auth.verifyOtp({ email, token, type: "signup" }));
+    if (error) throw error;
+  },
   async signOut(): Promise<void> {
     await getSupabase()?.auth.signOut();
   },

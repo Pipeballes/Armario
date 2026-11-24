@@ -1,15 +1,50 @@
 "use client";
 
-import { useState } from "react";
-import { cloudEnabled } from "@/lib/supabase";
+import { useEffect, useState } from "react";
+import { cloudEnabled, linkError } from "@/lib/supabase";
 import { actions, useArmario } from "@/lib/store";
 
 export default function AccountSection() {
   const { account, localCount } = useArmario();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(linkError);
+  const [cooldown, setCooldown] = useState(0);
+
+  // Sacar el error del link de la dirección (Next.js la restaura al cargar, por eso se hace acá).
+  useEffect(() => {
+    if (linkError && /error/.test(window.location.hash + window.location.search)) {
+      window.history.replaceState(window.history.state, "", window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
+  async function send() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await actions.signIn(email.trim());
+      setSent(true);
+      setCode("");
+      setCooldown(60);
+    } catch (err) {
+      const text = err instanceof Error ? err.message : "";
+      setMsg(
+        /rate|seconds|limit/i.test(text)
+          ? "Se pidieron muchos mails seguidos. Esperá unos minutos y probá de nuevo (si ya tenés un código, usalo)."
+          : "No se pudo mandar el mail. Revisá la dirección y probá de nuevo.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (!cloudEnabled) return null;
 
@@ -57,15 +92,11 @@ export default function AccountSection() {
     <section id="cuenta" className="card mb-6 scroll-mt-4 p-4">
       <p className="mb-1 font-semibold">Guardá tu armario en la nube</p>
       <p className="mb-3 text-sm text-muted">
-        Así no se pierde si cambiás de celular y lo ves desde la compu. Te mando un link a tu mail para entrar, sin
+        Así no se pierde si cambiás de celular y lo ves desde la compu. Te mando un código a tu mail para entrar, sin
         contraseña.
       </p>
+      {msg && <p className="mb-3 rounded-xl bg-accent-soft p-3 text-sm">{msg}</p>}
       {sent ? (
-        <p className="rounded-xl bg-accent-soft p-3 text-sm">
-          📬 Te mandé un mail a <strong>{email}</strong>. Abrí el link desde este mismo dispositivo. Si no llega en un
-          par de minutos, mirá en spam.
-        </p>
-      ) : (
         <form
           className="flex flex-col gap-2"
           onSubmit={async (e) => {
@@ -73,18 +104,57 @@ export default function AccountSection() {
             setBusy(true);
             setMsg(null);
             try {
-              await actions.signIn(email.trim());
-              setSent(true);
-            } catch (err) {
-              const text = err instanceof Error ? err.message : "";
-              setMsg(
-                /rate|seconds/i.test(text)
-                  ? "Pediste muchos links seguidos. Esperá un minuto y probá de nuevo."
-                  : "No se pudo mandar el mail. Revisá la dirección y probá de nuevo.",
-              );
+              await actions.verifyCode(email.trim(), code);
+            } catch {
+              setMsg("Ese código no es correcto o ya venció. Revisalo o pedí uno nuevo.");
             } finally {
               setBusy(false);
             }
+          }}
+        >
+          <p className="text-sm">
+            📬 Te mandé un mail a <strong className="break-all">{email}</strong> con un <strong>código</strong>.
+            Escribilo acá. Si no llega en un par de minutos, mirá en spam o promociones.
+          </p>
+          <input
+            className="input text-center text-2xl tracking-[0.4em]"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="••••••"
+            maxLength={10}
+            required
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            aria-label="Código del mail"
+          />
+          <button className="btn-primary" disabled={busy || code.length < 6}>
+            {busy ? "Entrando…" : "Entrar"}
+          </button>
+          <p className="text-xs text-muted">
+            También podés tocar el link del mail, pero abrilo una sola vez y en este mismo dispositivo.
+          </p>
+          <div className="flex gap-2">
+            <button type="button" className="btn-ghost flex-1" disabled={busy || cooldown > 0} onClick={send}>
+              {cooldown > 0 ? `Reenviar (${cooldown}s)` : "Reenviar mail"}
+            </button>
+            <button
+              type="button"
+              className="btn-ghost flex-1"
+              onClick={() => {
+                setSent(false);
+                setMsg(null);
+              }}
+            >
+              Cambiar mail
+            </button>
+          </div>
+        </form>
+      ) : (
+        <form
+          className="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            send();
           }}
         >
           <input
@@ -97,9 +167,8 @@ export default function AccountSection() {
             onChange={(e) => setEmail(e.target.value)}
           />
           <button className="btn-primary" disabled={busy}>
-            {busy ? "Mandando…" : "Mandame el link"}
+            {busy ? "Mandando…" : "Mandame el código"}
           </button>
-          {msg && <p className="text-sm text-danger">{msg}</p>}
         </form>
       )}
     </section>
