@@ -184,3 +184,27 @@ export const PALETTE_BY_UNDERTONE: Record<Undertone, string[]> = {
   frio: ["blanco", "gris", "azul-marino", "celeste", "azul", "rosa", "violeta", "bordo", "verde", "negro"],
   neutro: ["blanco", "gris", "azul-marino", "beige", "verde", "bordo", "rosa", "celeste", "verde-oliva", "negro"],
 };
+
+/** Deportes para marcar ropa deportiva. "general" = sirve para cualquier deporte o entrenar. */
+export const SPORTS: { id: string; label: string; emoji: string; re?: RegExp }[] = [
+  { id: "general", label: "Cualquier deporte", emoji: "🏃" },
+  { id: "futbol", label: "Fútbol", emoji: "⚽", re: /f[uú]tbol|futbol|partido|f5|f7|fulbito|picado/i },
+  { id: "running", label: "Running", emoji: "👟", re: /correr|running|run\b|trote|marat[oó]n/i },
+  { id: "gimnasio", label: "Gimnasio", emoji: "🏋️", re: /gym|gimnasio|pesas|crossfit|funcional|entren/i },
+  { id: "padel-tenis", label: "Pádel / tenis", emoji: "🎾", re: /p[aá]del|padel|tenis/i },
+  { id: "basquet", label: "Básquet", emoji: "🏀", re: /b[aá]squet|basket/i },
+  { id: "rugby", label: "Rugby", emoji: "🏉", re: /rugby/i },
+  { id: "hockey", label: "Hockey", emoji: "🏑", re: /hockey/i },
+  { id: "natacion", label: "Natación", emoji: "🏊", re: /nataci|pileta|nadar/i },
+  { id: "ciclismo", label: "Ciclismo", emoji: "🚴", re: /bici|ciclismo|spinning/i },
+  { id: "yoga", label: "Yoga / pilates", emoji: "🧘", re: /yoga|pilates/i },
+  { id: "otro", label: "Otro", emoji: "🥇" },
+];
+
+export const sportById = (id: string | undefined) => SPORTS.find((s) => s.id === id);
+
+/** Qué deporte es un evento por su nombre (ej: "Fútbol con los pibes" → futbol). */
+export function sportFromText(text: string | undefined): string | undefined {
+  if (!text) return undefined;
+  return SPORTS.find((s) => s.re?.test(text))?.id;
+}

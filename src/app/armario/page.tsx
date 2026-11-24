@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CATEGORIES, COLORS, colorById, type Category } from "@/lib/catalog";
+import { CATEGORIES, COLORS, colorById, sportById, type Category } from "@/lib/catalog";
 import { actions, useArmario } from "@/lib/store";
 import type { Garment } from "@/lib/types";
 import GarmentForm from "@/components/GarmentForm";
@@ -104,6 +104,7 @@ export default function ArmarioPage() {
                   <p className="text-xs text-muted">
                     {colorById(g.color).label}
                     {g.size ? ` · Talle ${g.size}` : ""}
+                    {g.sport ? ` · ${sportById(g.sport)?.emoji ?? "🏃"}` : ""}
                   </p>
                 </button>
               </li>

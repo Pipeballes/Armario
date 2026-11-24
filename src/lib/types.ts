@@ -19,6 +19,8 @@ export interface Garment {
   photoLabel?: string;
   /** Talle (ej: "M", "42", "Único"). */
   size?: string;
+  /** Si es deportiva: id de SPORTS ("general" = para cualquier deporte). */
+  sport?: string;
   name: string;
   category: Category;
   color: string;

@@ -7,6 +7,7 @@ import {
   UNDERTONES,
   PALETTE_BY_UNDERTONE,
   colorById,
+  sportById,
   type OccasionId,
   type Weather,
 } from "./catalog";
@@ -52,6 +53,8 @@ export interface OutfitRequest {
   now?: number;
   /** Prendas que ya se usan en otro día del plan: mejor no repetirlas. */
   avoidIds?: string[];
+  /** Deporte del evento (si es de deporte), para elegir la ropa de ese deporte. */
+  sport?: string;
   /** Lo que marcaste con 👍 / 👎. */
   feedback?: Feedback;
 }
@@ -170,6 +173,20 @@ function scoreOutfit(items: Garment[], req: OutfitRequest): Outfit {
       const tone = UNDERTONES.find((u) => u.id === undertone)!.label.toLowerCase();
       reasons.push(`El ${c} cerca de la cara favorece tu tono de piel ${tone}.`);
     }
+  }
+
+  // Ropa de un deporte: para ese deporte sí, para otra cosa no (los botines no van a una cita).
+  const specific = core.filter((i) => i.sport && i.sport !== "general");
+  if (req.occasion === "deporte") {
+    const sportsy = core.filter((i) => i.sport).length;
+    score += (sportsy / core.length) * 1.5;
+    if (req.sport) {
+      const match = specific.filter((i) => i.sport === req.sport).length;
+      score += match * 1.5 - (specific.length - match) * 2.5;
+      if (match > 0) reasons.push(`Tiene ropa para ${sportById(req.sport)?.label.toLowerCase() ?? "ese deporte"}.`);
+    }
+  } else {
+    score -= specific.length * 2;
   }
 
   // Ropa usada hace poco: mejor rotar.

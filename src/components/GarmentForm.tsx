@@ -5,6 +5,7 @@ import {
   CATEGORIES,
   COLORS,
   FORMALITY_LABELS,
+  SPORTS,
   STYLES,
   WARMTH,
   type Category,
@@ -115,6 +116,16 @@ export default function GarmentForm({
     } catch {
       setError("No se pudo leer esa foto. Probá con otra.");
     }
+  }
+
+  /** Marca si es deportiva (y de qué deporte); si lo es, suma el estilo deportivo. */
+  function setSport(sport: string | undefined) {
+    setForm((f) => ({
+      ...f,
+      sport,
+      styles: sport && !f.styles.includes("deportivo") ? [...f.styles, "deportivo"] : f.styles,
+      formality: sport ? Math.min(f.formality, 2) : f.formality,
+    }));
   }
 
   function toggleStyle(id: StyleId) {
@@ -283,6 +294,29 @@ export default function GarmentForm({
             Estampada / rayada / a cuadros
           </Chip>
         </div>
+      </Section>
+
+      <Section title="¿Es deportiva?">
+        <div className="flex gap-2">
+          <Chip pressed={!form.sport} onClick={() => setSport(undefined)}>
+            No
+          </Chip>
+          <Chip pressed={Boolean(form.sport)} onClick={() => setSport(form.sport || "general")}>
+            🏃 Sí, es deportiva
+          </Chip>
+        </div>
+        {form.sport && (
+          <>
+            <p className="mt-3 mb-2 text-sm text-muted">¿Para qué deporte? Así la uso cuando tengas ese deporte en la agenda.</p>
+            <div className="flex flex-wrap gap-2">
+              {SPORTS.map((sp) => (
+                <Chip key={sp.id} pressed={form.sport === sp.id} onClick={() => setSport(sp.id)}>
+                  <span aria-hidden>{sp.emoji}</span> {sp.label}
+                </Chip>
+              ))}
+            </div>
+          </>
+        )}
       </Section>
 
       <Section title="Estilo" hint="Podés elegir más de uno.">

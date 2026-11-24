@@ -5,6 +5,7 @@ import {
   CATEGORIES,
   COLORS,
   SKIN_DEPTHS,
+  SPORTS,
   STYLES,
   UNDERTONES,
   WARMTH,
@@ -27,6 +28,8 @@ export interface GarmentAnalysis {
   warmth: Warmth;
   /** Talle leído de la etiqueta, si se ve. */
   size?: string;
+  /** Si es ropa deportiva, de qué deporte. */
+  sport?: string;
 }
 
 export interface ProfileAnalysis {
@@ -58,6 +61,7 @@ export const GARMENT_PROMPT = `Sos un asesor de moda. Mirá la foto de UNA prend
 - styles: de 1 a 3 estilos que le correspondan.
 - formality: 1 = para estar en casa o hacer deporte, 3 = casual arreglado, 5 = formal (traje, vestido de fiesta).
 - warmth: light (para calor), medium, warm (abriga mucho).
+- sport: "ninguno" si no es ropa deportiva. Si lo es: el deporte si es claro (botines o camiseta de fútbol → futbol, calzas de running → running, raqueta/pádel → padel-tenis, etc.) o "general" si sirve para entrenar en general.
 - size: el talle SOLO si se lee en una etiqueta (ej: "M", "XL", "42", "10"). Si no se ve, dejalo vacío; no lo adivines.`;
 
 export const GARMENT_SCHEMA = {
@@ -71,6 +75,7 @@ export const GARMENT_SCHEMA = {
     formality: { type: "INTEGER" },
     warmth: { type: "STRING", enum: ids(WARMTH) },
     size: { type: "STRING", nullable: true },
+    sport: { type: "STRING", enum: ["ninguno", ...SPORTS.map((x) => x.id)] },
   },
   required: ["name", "category", "color", "pattern", "styles", "formality", "warmth"],
 };
@@ -131,6 +136,7 @@ export function parseGarment(raw: unknown): GarmentAnalysis | null {
     formality: Number.isFinite(f) ? Math.min(5, Math.max(1, f)) : 2,
     warmth,
     size: parseSize(r.size),
+    sport: pick<string>(r.sport, SPORTS.map((x) => x.id)) ?? undefined,
   };
 }
 

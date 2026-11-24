@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { CATEGORIES, OCCASIONS, WEATHERS, type OccasionId, type Weather } from "@/lib/catalog";
+import { CATEGORIES, OCCASIONS, WEATHERS, type OccasionId, type Weather, SPORTS, sportFromText } from "@/lib/catalog";
 import { outfitKey, suggestOutfits, type Outfit } from "@/lib/outfits";
 import { AiUnavailable, chooseOutfit } from "@/lib/ai";
 import type { ChoiceResult } from "@/lib/ai-schema";
@@ -29,6 +29,7 @@ export default function OutfitsPage() {
   const { ready, garments, profile, account, error } = useArmario();
   const router = useRouter();
   const [occasion, setOccasion] = useState<OccasionId>("casual");
+  const [sport, setSport] = useState<string | undefined>(undefined);
   // Clima: el que elegiste a mano, o si no el del pronóstico.
   const [manualWeather, setManualWeather] = useState<Weather | null>(null);
   const [auto, setAuto] = useState<WeatherReading | null>(null);
@@ -46,12 +47,13 @@ export default function OutfitsPage() {
     () =>
       suggestOutfits(garments, {
         occasion,
+        sport: occasion === "deporte" ? sport : undefined,
         weather,
         profile,
         random: seed ? seeded(seed) : undefined,
         feedback: profile.feedback,
       }),
-    [garments, occasion, weather, profile, seed],
+    [garments, occasion, sport, weather, profile, seed],
   );
 
   if (!ready) return <Loading />;
@@ -72,6 +74,7 @@ export default function OutfitsPage() {
       const w = WEATHERS.find((x) => x.id === weather)!.label;
       const extra = suggestOutfits(garments, {
         occasion,
+        sport: occasion === "deporte" ? sport : undefined,
         weather,
         profile,
         feedback: profile.feedback,
@@ -151,6 +154,7 @@ export default function OutfitsPage() {
         onSelect={(e) => {
           setEvent(e);
           setOccasion(e.occasion);
+          setSport(sportFromText(e.title));
           setManualWeather(null);
           setSeed(0);
           setWorn(null);
@@ -166,6 +170,7 @@ export default function OutfitsPage() {
               onClick={() => {
                 setOccasion(o.id);
                 setEvent(null);
+                setSport(undefined);
                 reset();
               }}
             >
@@ -173,6 +178,25 @@ export default function OutfitsPage() {
             </Chip>
           ))}
         </div>
+        {occasion === "deporte" && (
+          <>
+            <p className="mt-3 mb-2 text-sm text-muted">¿Qué deporte?</p>
+            <div className="flex flex-wrap gap-2">
+              {SPORTS.filter((sp) => sp.id !== "general" && sp.id !== "otro").map((sp) => (
+                <Chip
+                  key={sp.id}
+                  pressed={sport === sp.id}
+                  onClick={() => {
+                    setSport(sport === sp.id ? undefined : sp.id);
+                    reset();
+                  }}
+                >
+                  <span aria-hidden>{sp.emoji}</span> {sp.label}
+                </Chip>
+              ))}
+            </div>
+          </>
+        )}
       </Section>
 
       <Section title="Clima">

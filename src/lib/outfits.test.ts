@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { colorHarmony, outfitKey, suggestOutfits } from "./outfits";
+import { sportFromText } from "./catalog";
 import { EMPTY_PROFILE, type Garment } from "./types";
 
 let n = 0;
@@ -126,5 +127,47 @@ describe("feedback 👍 / 👎", () => {
     const res = suggestOutfits(ropa, { ...req, feedback: { liked: [outfitKey(last.items)], disliked: [] } });
     expect(outfitKey(res.outfits[0].items)).toBe(outfitKey(last.items));
     expect(res.outfits[0].reasons[0]).toContain("te gustó");
+  });
+});
+
+describe("ropa deportiva", () => {
+  const mk = (id: string, p: Partial<Garment> & Pick<Garment, "category" | "color">): Garment => ({
+    id, photo: "", name: id, pattern: "liso", styles: ["deportivo"], formality: 1, warmth: "light", createdAt: 0, ...p,
+  });
+  const ropa = [
+    mk("camiseta-futbol", { category: "top", color: "azul", sport: "futbol" }),
+    mk("remera-dryfit", { category: "top", color: "negro", sport: "general" }),
+    mk("short", { category: "bottom", color: "negro", sport: "general" }),
+    mk("botines", { category: "shoes", color: "negro", sport: "futbol" }),
+    mk("zapatillas-running", { category: "shoes", color: "blanco", sport: "running" }),
+    mk("remera-casual", { category: "top", color: "blanco", styles: ["casual"], formality: 2 }),
+    mk("jean", { category: "bottom", color: "denim", styles: ["casual"], formality: 2 }),
+    mk("zapatillas", { category: "shoes", color: "blanco", styles: ["casual"], formality: 2 }),
+  ];
+
+  it("para fútbol elige botines y no las de running", () => {
+    const r = suggestOutfits(ropa, { occasion: "deporte", sport: "futbol", weather: "templado", profile: EMPTY_PROFILE, count: 1 });
+    const ids = r.outfits[0].items.map((i) => i.id);
+    expect(ids).toContain("botines");
+    expect(ids).not.toContain("zapatillas-running");
+  });
+
+  it("para running elige las zapatillas de running", () => {
+    const r = suggestOutfits(ropa, { occasion: "deporte", sport: "running", weather: "templado", profile: EMPTY_PROFILE, count: 1 });
+    expect(r.outfits[0].items.map((i) => i.id)).toContain("zapatillas-running");
+  });
+
+  it("un día casual no usa botines", () => {
+    const r = suggestOutfits(ropa, { occasion: "casual", weather: "templado", profile: EMPTY_PROFILE, count: 1 });
+    expect(r.outfits[0].items.map((i) => i.id)).not.toContain("botines");
+  });
+});
+
+describe("sportFromText", () => {
+  it("reconoce el deporte del evento", () => {
+    expect(sportFromText("Fútbol con los pibes")).toBe("futbol");
+    expect(sportFromText("Pádel 19hs")).toBe("padel-tenis");
+    expect(sportFromText("Gym")).toBe("gimnasio");
+    expect(sportFromText("Parcial")).toBeUndefined();
   });
 });

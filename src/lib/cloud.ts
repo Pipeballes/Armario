@@ -23,6 +23,7 @@ interface GarmentRow {
   photo_back_path: string | null;
   photo_label_path: string | null;
   size: string | null;
+  sport: string | null;
   created_at: string;
   last_worn: string | null;
 }
@@ -62,6 +63,7 @@ function rowToGarment(r: GarmentRow, urls: Map<string, string>): Garment {
     photoBack: r.photo_back_path ? urls.get(r.photo_back_path) : undefined,
     photoLabel: r.photo_label_path ? urls.get(r.photo_label_path) : undefined,
     size: r.size ?? undefined,
+    sport: r.sport ?? undefined,
     name: r.name,
     category: r.category,
     color: r.color,
@@ -124,6 +126,7 @@ export function createCloud(sb: SupabaseClient, userId: string) {
         photo_back_path: back?.path ?? null,
         photo_label_path: label?.path ?? null,
         size: g.size?.trim() || null,
+        sport: g.sport || null,
         created_at: new Date(g.createdAt).toISOString(),
         last_worn: g.lastWorn ? new Date(g.lastWorn).toISOString() : null,
       });

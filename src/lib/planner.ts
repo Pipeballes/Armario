@@ -1,7 +1,7 @@
 // Planificador de la semana: un outfit por día según tu agenda y el clima, sin repetir ropa.
 
 import type { AgendaEvent } from "./agenda";
-import type { OccasionId, Weather } from "./catalog";
+import { sportFromText, type OccasionId, type Weather } from "./catalog";
 import { outfitKey, suggestOutfits, type Feedback, type Outfit } from "./outfits";
 import type { Garment, Profile } from "./types";
 
@@ -96,6 +96,7 @@ export function planWeek(opts: {
     const pick = (exclude: string[]) =>
       suggestOutfits(opts.garments, {
         occasion,
+        sport: occasion === "deporte" ? sportFromText(event?.title) : undefined,
         weather,
         profile: opts.profile,
         count: 1,
