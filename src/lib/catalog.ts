@@ -23,59 +23,204 @@ export const CATEGORIES: { id: Category; label: string; plural: string; emoji: s
 export const SPECIAL_CATEGORIES: Category[] = ["pijama", "interior", "malla"];
 
 type KindGender = "hombre" | "mujer";
-/** Dónde va en el avatar: arriba, abajo o ninguno. */
+/** Dónde va en el avatar (solo para pijama, ropa interior y malla). */
 type KindSlot = "top" | "bottom" | "outerwear" | "accessory" | null;
 export interface KindDef {
   id: string;
   label: string;
-  /** Si es solo para un género (si no elegiste género, se muestran todas). */
+  /** Si es solo para un género (con "otro" o sin género se ven todas). */
   only?: KindGender;
-  slot: KindSlot;
+  slot?: KindSlot;
+  /** Pistas para dibujarla en el avatar. */
+  look?: "corta" | "larga" | "pollera" | "botas" | "gorro" | "bufanda";
 }
 
-const UNDERWEAR: KindDef[] = [
-  { id: "calzoncillo", label: "Calzoncillo / bóxer", only: "hombre", slot: "bottom" },
-  { id: "bombacha", label: "Bombacha", only: "mujer", slot: "bottom" },
-  { id: "corpino", label: "Corpiño", only: "mujer", slot: "top" },
-  { id: "top-interior", label: "Top / bralette", only: "mujer", slot: "top" },
-  { id: "camiseta", label: "Camiseta", slot: "top" },
-  { id: "medias", label: "Medias", slot: null },
-];
-
-const SWIM: KindDef[] = [
-  { id: "short-bano", label: "Short de baño", slot: "bottom" },
-  { id: "bikini-arriba", label: "Bikini (arriba)", only: "mujer", slot: "top" },
-  { id: "bikini-abajo", label: "Bikini (abajo)", only: "mujer", slot: "bottom" },
-  { id: "enteriza", label: "Malla enteriza", only: "mujer", slot: "top" },
-  { id: "remera-uv", label: "Remera de agua / UV", slot: "top" },
-];
-
+const H = "hombre" as const;
+const M = "mujer" as const;
 const OTHER: KindDef = { id: "otro", label: "Otro", slot: null };
 
-/** Qué tipo de prenda es dentro de cada categoría especial. */
-export const KINDS: Partial<Record<Category, KindDef[]>> = {
+const UNDERWEAR: KindDef[] = [
+  { id: "calzoncillo", label: "Calzoncillo / slip", only: H, slot: "bottom" },
+  { id: "boxer", label: "Bóxer", only: H, slot: "bottom" },
+  { id: "bombacha", label: "Bombacha", only: M, slot: "bottom" },
+  { id: "culotte", label: "Culotte", only: M, slot: "bottom" },
+  { id: "tanga", label: "Tanga / colaless", only: M, slot: "bottom" },
+  { id: "corpino", label: "Corpiño", only: M, slot: "top" },
+  { id: "corpino-deportivo", label: "Corpiño deportivo", only: M, slot: "top" },
+  { id: "top-interior", label: "Top / bralette", only: M, slot: "top" },
+  { id: "body-interior", label: "Body", only: M, slot: "top" },
+  { id: "camiseta", label: "Camiseta", slot: "top" },
+  { id: "medias", label: "Medias", slot: null },
+  { id: "soquetes", label: "Soquetes", slot: null },
+  { id: "medias-cancan", label: "Medias de nylon / cancan", only: M, slot: null },
+];
+
+/**
+ * Qué tipo de prenda es dentro de cada categoría, con lo que usan hombres y mujeres
+ * (nombres como se dicen en Argentina).
+ */
+export const KINDS: Record<Category, KindDef[]> = {
+  top: [
+    { id: "remera", label: "Remera", look: "corta" },
+    { id: "remera-manga-larga", label: "Remera manga larga", look: "larga" },
+    { id: "musculosa", label: "Musculosa", look: "corta" },
+    { id: "camisa", label: "Camisa", look: "larga" },
+    { id: "camisa-manga-corta", label: "Camisa manga corta", look: "corta" },
+    { id: "chomba", label: "Chomba", look: "corta" },
+    { id: "buzo", label: "Buzo", look: "larga" },
+    { id: "hoodie", label: "Buzo con capucha", look: "larga" },
+    { id: "sweater", label: "Sweater / pulóver", look: "larga" },
+    { id: "polera", label: "Polera (cuello alto)", look: "larga" },
+    { id: "cardigan", label: "Cárdigan", look: "larga" },
+    { id: "chaleco-tejido", label: "Chaleco tejido", look: "corta" },
+    { id: "camiseta-equipo", label: "Camiseta de fútbol / equipo", look: "corta" },
+    { id: "blusa", label: "Blusa", only: M, look: "larga" },
+    { id: "top", label: "Top", only: M, look: "corta" },
+    { id: "crop-top", label: "Crop top", only: M, look: "corta" },
+    { id: "body", label: "Body", only: M, look: "corta" },
+    { id: "corset", label: "Corset / corsé", only: M, look: "corta" },
+    { id: "tunica", label: "Túnica / camisola", only: M, look: "larga" },
+    OTHER,
+  ],
+  bottom: [
+    { id: "jean", label: "Jean" },
+    { id: "pantalon-vestir", label: "Pantalón de vestir" },
+    { id: "chino", label: "Chino / gabardina" },
+    { id: "jogging", label: "Jogging" },
+    { id: "cargo", label: "Cargo" },
+    { id: "pantalon-lino", label: "Pantalón de lino" },
+    { id: "short", label: "Short", look: "corta" },
+    { id: "bermuda", label: "Bermuda", look: "corta" },
+    { id: "calza", label: "Calza" },
+    { id: "calza-corta", label: "Calza corta / biker", only: M, look: "corta" },
+    { id: "pollera-mini", label: "Pollera corta", only: M, look: "pollera" },
+    { id: "pollera-midi", label: "Pollera midi", only: M, look: "pollera" },
+    { id: "pollera-larga", label: "Pollera larga", only: M, look: "pollera" },
+    { id: "short-pollera", label: "Short pollera", only: M, look: "pollera" },
+    { id: "palazzo", label: "Palazzo / pantalón ancho", only: M },
+    { id: "oxford", label: "Oxford", only: M },
+    { id: "babucha", label: "Babucha", only: M },
+    OTHER,
+  ],
+  dress: [
+    { id: "vestido-corto", label: "Vestido corto", look: "corta" },
+    { id: "vestido-midi", label: "Vestido midi", look: "corta" },
+    { id: "vestido-largo", label: "Vestido largo", look: "larga" },
+    { id: "vestido-fiesta", label: "Vestido de fiesta", look: "larga" },
+    { id: "solero", label: "Solero", look: "corta" },
+    { id: "enterito", label: "Enterito / mono", look: "larga" },
+    { id: "jardinero", label: "Jardinero", look: "larga" },
+    OTHER,
+  ],
+  shoes: [
+    { id: "zapatillas", label: "Zapatillas" },
+    { id: "zapatillas-deportivas", label: "Zapatillas deportivas / running" },
+    { id: "botines", label: "Botines de fútbol" },
+    { id: "zapatos", label: "Zapatos" },
+    { id: "mocasines", label: "Mocasines" },
+    { id: "nauticos", label: "Náuticos" },
+    { id: "borcegos", label: "Borcegos", look: "botas" },
+    { id: "botas", label: "Botas / botinetas", look: "botas" },
+    { id: "alpargatas", label: "Alpargatas" },
+    { id: "sandalias", label: "Sandalias" },
+    { id: "ojotas", label: "Ojotas" },
+    { id: "pantuflas", label: "Pantuflas" },
+    { id: "tacos", label: "Tacos / stilettos", only: M },
+    { id: "sandalias-taco", label: "Sandalias con taco", only: M },
+    { id: "plataformas", label: "Plataformas", only: M },
+    { id: "chatitas", label: "Chatitas / balerinas", only: M },
+    { id: "botas-altas", label: "Botas altas / bucaneras", only: M, look: "botas" },
+    { id: "zuecos", label: "Zuecos / mules", only: M },
+    OTHER,
+  ],
+  outerwear: [
+    { id: "campera", label: "Campera" },
+    { id: "campera-jean", label: "Campera de jean" },
+    { id: "campera-cuero", label: "Campera de cuero" },
+    { id: "campera-inflable", label: "Campera inflable / puffer" },
+    { id: "rompevientos", label: "Rompevientos" },
+    { id: "parka", label: "Parka" },
+    { id: "tapado", label: "Tapado" },
+    { id: "piloto", label: "Piloto / trench" },
+    { id: "saco", label: "Saco / blazer" },
+    { id: "chaleco", label: "Chaleco" },
+    { id: "polar", label: "Polar / micropolar" },
+    { id: "poncho", label: "Poncho / ruana" },
+    { id: "kimono", label: "Kimono", only: M },
+    { id: "capa", label: "Capa", only: M },
+    { id: "torera", label: "Torera / bolero", only: M },
+    OTHER,
+  ],
+  accessory: [
+    { id: "gorra", label: "Gorra", look: "gorro" },
+    { id: "gorro", label: "Gorro de lana", look: "gorro" },
+    { id: "sombrero", label: "Sombrero / piluso", look: "gorro" },
+    { id: "bufanda", label: "Bufanda / cuello", look: "bufanda" },
+    { id: "guantes", label: "Guantes" },
+    { id: "cinturon", label: "Cinturón" },
+    { id: "anteojos-sol", label: "Anteojos de sol" },
+    { id: "reloj", label: "Reloj" },
+    { id: "mochila", label: "Mochila" },
+    { id: "rinonera", label: "Riñonera" },
+    { id: "billetera", label: "Billetera" },
+    { id: "collar", label: "Cadena / collar" },
+    { id: "pulsera", label: "Pulsera" },
+    { id: "anillo", label: "Anillo" },
+    { id: "aros", label: "Aros" },
+    { id: "corbata", label: "Corbata", only: H },
+    { id: "mono", label: "Moño (corbata)", only: H },
+    { id: "tiradores", label: "Tiradores", only: H },
+    { id: "gemelos", label: "Gemelos", only: H },
+    { id: "morral", label: "Morral / bandolera", only: H },
+    { id: "cartera", label: "Cartera", only: M },
+    { id: "bolso", label: "Bolso / tote", only: M },
+    { id: "sobre", label: "Sobre / clutch", only: M },
+    { id: "panuelo", label: "Pañuelo", only: M, look: "bufanda" },
+    { id: "vincha", label: "Vincha", only: M },
+    { id: "accesorio-pelo", label: "Hebilla / colita / scrunchie", only: M },
+    OTHER,
+  ],
   pijama: [
-    { id: "remera", label: "Remera", slot: "top" },
-    { id: "short", label: "Short", slot: "bottom" },
+    { id: "remera", label: "Remera", slot: "top", look: "corta" },
+    { id: "remera-manga-larga", label: "Remera manga larga", slot: "top", look: "larga" },
+    { id: "short", label: "Short", slot: "bottom", look: "corta" },
     { id: "pantalon", label: "Pantalón", slot: "bottom" },
     { id: "buzo", label: "Buzo", slot: "outerwear" },
-    { id: "camison", label: "Camisón", only: "mujer", slot: "top" },
+    { id: "bata", label: "Bata", slot: "outerwear" },
+    { id: "enterito-pijama", label: "Enterito / mameluco", slot: "top", look: "larga" },
+    { id: "camison", label: "Camisón", only: M, slot: "top", look: "corta" },
+    { id: "babydoll", label: "Babydoll", only: M, slot: "top", look: "corta" },
     ...UNDERWEAR,
-    { id: "accesorio", label: "Accesorio", slot: "accessory" },
+    { id: "accesorio", label: "Accesorio (antifaz, gorro…)", slot: "accessory" },
     OTHER,
   ],
   interior: [...UNDERWEAR, OTHER],
-  malla: [...SWIM, OTHER],
+  malla: [
+    { id: "short-bano", label: "Short de baño", only: H, slot: "bottom", look: "corta" },
+    { id: "slip-bano", label: "Slip / sunga", only: H, slot: "bottom", look: "corta" },
+    { id: "bikini-arriba", label: "Bikini (arriba)", only: M, slot: "top", look: "corta" },
+    { id: "bikini-abajo", label: "Bikini (abajo)", only: M, slot: "bottom", look: "corta" },
+    { id: "enteriza", label: "Malla enteriza", only: M, slot: "top", look: "corta" },
+    { id: "trikini", label: "Trikini", only: M, slot: "top", look: "corta" },
+    { id: "pareo", label: "Pareo / salida de baño", only: M, slot: "outerwear" },
+    { id: "remera-uv", label: "Remera de agua / UV", slot: "top", look: "corta" },
+    OTHER,
+  ],
 };
 
 /** Tipos para mostrar según el género (sin género o "otro": todos). */
 export function kindsFor(category: Category, gender: string | null | undefined): KindDef[] {
-  const list = KINDS[category] ?? [];
+  const list = KINDS[category];
   if (gender !== "hombre" && gender !== "mujer") return list;
   return list.filter((k) => !k.only || k.only === gender);
 }
 
-export const kindById = (category: Category, id: string | undefined) => KINDS[category]?.find((k) => k.id === id);
+export const kindById = (category: Category, id: string | undefined) => KINDS[category].find((k) => k.id === id);
+
+/** Categorías que se ven según el género (los vestidos no aparecen para hombre). */
+export function categoriesFor(gender: string | null | undefined) {
+  return CATEGORIES.filter((c) => gender !== "hombre" || c.id !== "dress");
+}
 
 export interface ColorDef {
   id: string;

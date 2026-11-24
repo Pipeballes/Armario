@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { slotOf } from "./avatar";
-import { kindsFor } from "./catalog";
+import { CATEGORIES, categoriesFor, kindsFor } from "./catalog";
 import type { Garment } from "./types";
 
 describe("kindsFor", () => {
@@ -24,8 +24,35 @@ describe("kindsFor", () => {
     expect(ids("malla")).toEqual(expect.arrayContaining(["short-bano", "bikini-arriba", "enteriza", "otro"]));
   });
 
-  it("las categorías comunes no tienen tipos", () => {
-    expect(ids("top")).toEqual([]);
+  it("todas las categorías tienen tipos y la opción Otro", () => {
+    for (const c of CATEGORIES) expect(ids(c.id)).toContain("otro");
+  });
+
+  it("hombre no ve prendas de mujer y mujer no ve las de hombre", () => {
+    const allM = CATEGORIES.flatMap((c) => kindsFor(c.id, "mujer"));
+    const allH = CATEGORIES.flatMap((c) => kindsFor(c.id, "hombre"));
+    expect(allH.some((k) => k.only === "mujer")).toBe(false);
+    expect(allM.some((k) => k.only === "hombre")).toBe(false);
+    expect(ids("bottom", "hombre")).not.toContain("pollera-midi");
+    expect(ids("shoes", "mujer")).toContain("tacos");
+    expect(ids("accessory", "hombre")).toContain("corbata");
+    expect(ids("accessory", "mujer")).not.toContain("corbata");
+  });
+
+  it('con "otro" (o sin elegir) se ve todo', () => {
+    expect(ids("accessory", "otro")).toEqual(expect.arrayContaining(["corbata", "cartera"]));
+  });
+
+  it("vestidos no aparecen para hombre", () => {
+    expect(categoriesFor("hombre").map((c) => c.id)).not.toContain("dress");
+    expect(categoriesFor("mujer").map((c) => c.id)).toContain("dress");
+  });
+
+  it("no hay tipos repetidos dentro de una categoría", () => {
+    for (const c of CATEGORIES) {
+      const list = ids(c.id);
+      expect(new Set(list).size).toBe(list.length);
+    }
   });
 });
 

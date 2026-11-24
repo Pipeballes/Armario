@@ -5,7 +5,8 @@ import {
   CATEGORIES,
   COLORS,
   FORMALITY_LABELS,
-  KINDS,
+  SPECIAL_CATEGORIES,
+  categoriesFor,
   SPORTS,
   kindById,
   kindsFor,
@@ -52,8 +53,20 @@ const SIDES: Side[] = ["front", "back", "label"];
 const QUICK_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "Único"];
 
 /** Nombre del tipo (ej: "Short de pijama", o lo que escribiste si es "otro"). */
+const KIND_TITLE: Record<Category, string> = {
+  top: "¿Qué prenda de arriba es?",
+  bottom: "¿Qué prenda de abajo es?",
+  dress: "¿Qué tipo de vestido o enterito?",
+  shoes: "¿Qué calzado es?",
+  outerwear: "¿Qué abrigo es?",
+  accessory: "¿Qué accesorio es?",
+  pijama: "¿Qué prenda de pijama es?",
+  interior: "¿Qué prenda de ropa interior es?",
+  malla: "¿Qué malla es?",
+};
+
 function kindLabel(f: Pick<Garment, "category" | "kind" | "kindDetail">): string | null {
-  if (!KINDS[f.category] || !f.kind) return null;
+  if (!f.kind) return null;
   const base = f.kind === "otro" ? f.kindDetail?.trim() || "Prenda" : (kindById(f.category, f.kind)?.label ?? "Prenda");
   return f.category === "pijama" ? `${base} de pijama` : base;
 }
@@ -109,6 +122,8 @@ export default function GarmentForm({
     setAi("working");
     try {
       const { size, ...r } = await analyzeGarment(photosFor(next));
+      // Si la IA eligió un tipo que no corresponde a tu género (o a esa categoría), se deja para que lo elijas vos.
+      if (!kindsFor(r.category, profile.gender).some((k) => k.id === r.kind)) r.kind = undefined;
       setForm((f) =>
         onlySize ? { ...f, size: f.size || size } : { ...f, ...r, name: f.name || r.name, size: f.size || size },
       );
@@ -172,8 +187,9 @@ export default function GarmentForm({
       setError("Falta la foto de atrás de la prenda (dala vuelta y sacale otra).");
       return;
     }
-    if (KINDS[form.category] && !form.kind) {
-      setError("Elegí qué prenda es (remera, short, medias…).");
+    if (!form.kind) {
+      setError("Elegí qué tipo de prenda es (remera, jean, zapatillas…).");
+      document.getElementById("tipo")?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
     if (form.kind === "otro" && !form.kindDetail?.trim()) {
@@ -194,8 +210,8 @@ export default function GarmentForm({
       name:
         form.name.trim() ||
         `${kindLabel(form) ?? cat.label} ${COLORS.find((c) => c.id === form.color)?.label.toLowerCase()}`,
-      sport: KINDS[form.category] ? undefined : form.sport,
-      kind: KINDS[form.category] ? form.kind : undefined,
+      sport: SPECIAL_CATEGORIES.includes(form.category) ? undefined : form.sport,
+      kind: form.kind,
       kindDetail: form.kind === "otro" ? form.kindDetail?.trim() : undefined,
     };
     try {
@@ -311,9 +327,9 @@ export default function GarmentForm({
         <p className="card mb-6 p-3 text-sm text-muted">No pude analizar la foto con IA. Completalo a mano.</p>
       )}
 
-      <Section title="¿Qué es?">
+      <Section title="Categoría">
         <div className="flex flex-wrap gap-2">
-          {CATEGORIES.filter((c) => c.id !== "dress" || profile.gender !== "hombre" || form.category === "dress").map(
+          {CATEGORIES.filter((c) => categoriesFor(profile.gender).includes(c) || form.category === c.id).map(
             (c) => (
               <Chip
                 key={c.id}
@@ -334,10 +350,8 @@ export default function GarmentForm({
         </div>
       </Section>
 
-      {KINDS[form.category] && (
-        <Section
-          title={`¿Qué prenda de ${form.category === "pijama" ? "pijama" : form.category === "malla" ? "malla" : "ropa interior"} es?`}
-        >
+      <div id="tipo">
+        <Section title={KIND_TITLE[form.category]}>
           <div className="flex flex-wrap gap-2">
             {kindsFor(form.category, profile.gender).map((k) => (
               <Chip key={k.id} pressed={form.kind === k.id} onClick={() => update("kind", k.id)}>
@@ -350,12 +364,12 @@ export default function GarmentForm({
               className="input mt-2"
               value={form.kindDetail ?? ""}
               onChange={(e) => update("kindDetail", e.target.value.slice(0, 40))}
-              placeholder="¿Qué es? Ej: bata, pantuflas, antifaz"
+              placeholder="Escribí qué es"
               aria-label="Qué prenda es"
             />
           )}
         </Section>
-      )}
+      </div>
 
       <Section
         title="Color principal"
@@ -381,7 +395,7 @@ export default function GarmentForm({
         </div>
       </Section>
 
-      {!KINDS[form.category] && (
+      {!SPECIAL_CATEGORIES.includes(form.category) && (
         <Section title="¿Es deportiva?">
           <div className="flex gap-2">
             <Chip pressed={!form.sport} onClick={() => setSport(undefined)}>

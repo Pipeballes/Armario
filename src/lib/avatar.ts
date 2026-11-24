@@ -1,6 +1,6 @@
 // Datos del avatar 3D: proporciones del cuerpo según el perfil, color de piel y qué prenda va en cada lugar.
 
-import { KINDS, colorById, kindById, type BodyType } from "./catalog";
+import { SPECIAL_CATEGORIES, colorById, kindById, type BodyType } from "./catalog";
 import type { AvatarStyle, Garment, Profile } from "./types";
 
 export interface BodyDims {
@@ -64,7 +64,7 @@ export const SLOTS: { id: Slot; label: string; emoji: string }[] = [
 export function slotOf(g: Garment): Slot | null {
   if (g.category === "dress") return "top";
   // Pijama, ropa interior y malla: según el tipo (remera arriba, short abajo, medias en ningún lado).
-  if (KINDS[g.category]) return kindById(g.category, g.kind)?.slot ?? null;
+  if (SPECIAL_CATEGORIES.includes(g.category)) return kindById(g.category, g.kind)?.slot ?? null;
   return g.category as Slot;
 }
 
@@ -99,28 +99,48 @@ export function lookFrom(sel: Selection, garments: Garment[]): Look {
   const outer = get("outerwear");
   const acc = get("accessory");
   const name = (g: Garment) => g.name.toLowerCase();
+  // Primero se usa el tipo de prenda elegido; si no tiene (prendas viejas), se adivina por el nombre.
+  const look = (g: Garment) => kindById(g.category, g.kind)?.look;
   return {
     top: top
       ? {
           color: hex(top),
           striped: top.pattern === "estampado",
-          sleeves: top.warmth === "light" || /musculosa|remera|top\b/.test(name(top)) ? "short" : "long",
-          dress: top.category !== "dress" ? "none" : top.formality >= 5 || /largo/.test(name(top)) ? "long" : "short",
+          sleeves:
+            look(top) === "corta" || (!look(top) && (top.warmth === "light" || /musculosa|remera|top\b/.test(name(top))))
+              ? "short"
+              : "long",
+          dress:
+            top.category !== "dress"
+              ? "none"
+              : look(top) === "larga" || (!look(top) && (top.formality >= 5 || /largo/.test(name(top))))
+                ? "long"
+                : "short",
         }
       : null,
     bottom: bottom
       ? {
           color: hex(bottom),
           striped: bottom.pattern === "estampado",
-          kind: /pollera|falda/.test(name(bottom)) ? "skirt" : /short|bermuda/.test(name(bottom)) ? "shorts" : "pants",
+          kind:
+            look(bottom) === "pollera" || /pollera|falda/.test(name(bottom))
+              ? "skirt"
+              : look(bottom) === "corta" || /short|bermuda/.test(name(bottom))
+                ? "shorts"
+                : "pants",
         }
       : null,
-    shoes: shoes ? { color: hex(shoes), boots: /bota/.test(name(shoes)) } : null,
+    shoes: shoes ? { color: hex(shoes), boots: look(shoes) === "botas" || /bota|borceg/.test(name(shoes)) } : null,
     outerwear: outer ? { color: hex(outer), striped: outer.pattern === "estampado" } : null,
     accessory: acc
       ? {
           color: hex(acc),
-          kind: /gorra|gorro|sombrero|boina/.test(name(acc)) ? "cap" : /bufanda|pa[ñn]uelo/.test(name(acc)) ? "scarf" : "other",
+          kind:
+            look(acc) === "gorro" || /gorra|gorro|sombrero|boina/.test(name(acc))
+              ? "cap"
+              : look(acc) === "bufanda" || /bufanda|pa[ñn]uelo/.test(name(acc))
+                ? "scarf"
+                : "other",
         }
       : null,
   };
