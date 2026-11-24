@@ -42,6 +42,14 @@ export interface Profile {
   calendarUrl?: string;
   /** Calendarios compartidos (iCloud o Google), cada uno con su nombre y color. */
   calendars?: CalendarLink[];
+  /** Cómo se ve el avatar del probador. */
+  avatar?: AvatarStyle;
+}
+
+export interface AvatarStyle {
+  hair: "corto" | "largo" | "rapado" | "rulos" | "recogido";
+  hairColor: string;
+  beard: boolean;
 }
 
 export interface CalendarLink {

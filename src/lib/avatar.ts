@@ -1,7 +1,7 @@
 // Datos del avatar 3D: proporciones del cuerpo según el perfil, color de piel y qué prenda va en cada lugar.
 
 import { colorById, type BodyType } from "./catalog";
-import type { Garment, Profile } from "./types";
+import type { AvatarStyle, Garment, Profile } from "./types";
 
 export interface BodyDims {
   /** Factor de escala por altura (1 = 1,72 m). */
@@ -116,7 +116,7 @@ export function lookFrom(sel: Selection, garments: Garment[]): Look {
 }
 
 /** Dónde se para la cámara en cada vista (en metros; el avatar mide 1,72 m a escala 1). */
-export type View = "frente" | "costado" | "espalda" | "otro";
+export type View = "frente" | "costado" | "espalda" | "cara" | "otro";
 
 export function cameraFor(view: View, scale: number): { position: [number, number, number]; target: [number, number, number] } {
   const t: [number, number, number] = [0, 0.92 * scale, 0];
@@ -126,6 +126,9 @@ export function cameraFor(view: View, scale: number): { position: [number, numbe
       return { position: [far, 1.15 * scale, 0], target: t };
     case "espalda":
       return { position: [0, 1.15 * scale, -far], target: t };
+    case "cara":
+      // Primer plano de la cara (la cabeza está a 1,67 m en el avatar de 1,72 m).
+      return { position: [0, 1.69 * scale, 0.95], target: [0, 1.66 * scale, 0] };
     case "otro":
       // Alguien de altura promedio (ojos a 1,62 m) parado a unos 2 m, un poco de costado.
       return { position: [0.8, 1.62, 2.3], target: [0, 0.95 * scale, 0] };
@@ -136,3 +139,26 @@ export function cameraFor(view: View, scale: number): { position: [number, numbe
 
 /** Outfit que manda la pantalla "¿Qué me pongo?" al probador con el botón "Probar en 3D". */
 export const PROBAR_KEY = "armario-probar";
+
+export const DEFAULT_AVATAR: AvatarStyle = { hair: "corto", hairColor: "#3b2a20", beard: false };
+
+export const HAIRS: { id: AvatarStyle["hair"]; label: string }[] = [
+  { id: "corto", label: "Corto" },
+  { id: "largo", label: "Largo" },
+  { id: "rapado", label: "Rapado" },
+  { id: "rulos", label: "Rulos" },
+  { id: "recogido", label: "Recogido" },
+];
+
+export const HAIR_COLORS: { hex: string; label: string }[] = [
+  { hex: "#1f1a17", label: "Negro" },
+  { hex: "#3b2a20", label: "Castaño oscuro" },
+  { hex: "#7a5233", label: "Castaño claro" },
+  { hex: "#d9b46a", label: "Rubio" },
+  { hex: "#a8482c", label: "Pelirrojo" },
+  { hex: "#9a9a9a", label: "Gris" },
+];
+
+export function avatarOf(p: Profile): AvatarStyle {
+  return { ...DEFAULT_AVATAR, ...(p.avatar ?? {}) };
+}

@@ -14,9 +14,13 @@ import {
   type Slot,
   type View,
   PROBAR_KEY,
+  HAIRS,
+  HAIR_COLORS,
+  avatarOf,
 } from "@/lib/avatar";
 import { suggestOutfits } from "@/lib/outfits";
-import { useArmario } from "@/lib/store";
+import { actions, useArmario } from "@/lib/store";
+import type { AvatarStyle } from "@/lib/types";
 import GarmentPhoto from "@/components/GarmentPhoto";
 import { ErrorBox, Loading } from "@/components/ui";
 
@@ -30,6 +34,7 @@ const VIEWS: { id: View; label: string; hint: string }[] = [
   { id: "frente", label: "Frente", hint: "" },
   { id: "costado", label: "Costado", hint: "" },
   { id: "espalda", label: "Espalda", hint: "" },
+  { id: "cara", label: "🙂 Cara", hint: "" },
   { id: "otro", label: "👀 Cómo te ven", hint: "Así te vería alguien parado a unos 2 metros, a la altura de sus ojos." },
 ];
 
@@ -53,10 +58,12 @@ export default function ProbadorPage() {
   const [slot, setSlot] = useState<Slot>("top");
   const [view, setView] = useState<View>("frente");
   const [touched, setTouched] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const dims = useMemo(() => bodyDims(profile), [profile]);
   const skin = useMemo(() => skinColor(profile), [profile]);
   const look = useMemo(() => lookFrom(sel, garments), [sel, garments]);
+  const style = useMemo(() => avatarOf(profile), [profile]);
 
   if (!ready) return <Loading />;
   if (error) return <ErrorBox message={error} />;
@@ -64,6 +71,8 @@ export default function ProbadorPage() {
   const topIsDress = garments.find((g) => g.id === sel.top)?.category === "dress";
   const options = garments.filter((g) => slotOf(g) === slot);
   const missingProfile = !profile.bodyType || !profile.skinDepth || !profile.height;
+
+  const setStyle = (patch: Partial<AvatarStyle>) => actions.saveProfile({ ...profile, avatar: { ...style, ...patch } });
 
   function pick(id: string | null) {
     setSel((s) => {
@@ -87,7 +96,7 @@ export default function ProbadorPage() {
       <p className="mb-4 text-sm text-muted">Elegí ropa de tu armario y mirá cómo te queda.</p>
 
       <div className="card relative mb-3 h-[58vh] min-h-[340px] overflow-hidden p-0">
-        <Avatar3D dims={dims} skin={skin} look={look} view={view} onUserMove={() => setTouched(true)} />
+        <Avatar3D dims={dims} skin={skin} look={look} view={view} style={style} onUserMove={() => setTouched(true)} />
         {!touched && view !== "otro" && (
           <p className="pointer-events-none absolute inset-x-0 bottom-3 text-center text-xs text-muted">
             👆 Arrastrá para girar · 🤏 pellizcá para acercar
@@ -100,7 +109,7 @@ export default function ProbadorPage() {
         )}
       </div>
 
-      <div className="mb-5 grid grid-cols-4 gap-2">
+      <div className="mb-5 grid grid-cols-5 gap-1.5">
         {VIEWS.map((v) => (
           <button
             key={v.id}
@@ -114,6 +123,60 @@ export default function ProbadorPage() {
             {v.label}
           </button>
         ))}
+      </div>
+
+      <div className="card mb-4 p-3">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between text-sm font-semibold"
+          aria-expanded={editing}
+          onClick={() => setEditing((e) => !e)}
+        >
+          <span>✏️ Personalizá tu avatar</span>
+          <span className="text-muted">{editing ? "▲" : "▼"}</span>
+        </button>
+        {editing && (
+          <div className="mt-3 space-y-3">
+            <div>
+              <span className="label">Peinado</span>
+              <div className="flex flex-wrap gap-2">
+                {HAIRS.map((h) => (
+                  <button key={h.id} type="button" className="chip" aria-pressed={style.hair === h.id} onClick={() => setStyle({ hair: h.id })}>
+                    {h.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="label">Color de pelo</span>
+              <div className="flex flex-wrap gap-2">
+                {HAIR_COLORS.map((c) => (
+                  <button
+                    key={c.hex}
+                    type="button"
+                    aria-label={c.label}
+                    aria-pressed={style.hairColor === c.hex}
+                    onClick={() => setStyle({ hairColor: c.hex })}
+                    className={`h-9 w-9 rounded-full border-2 ${style.hairColor === c.hex ? "border-accent ring-2 ring-accent/30" : "border-line"}`}
+                    style={{ background: c.hex }}
+                  />
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="label">Barba</span>
+              <div className="flex gap-2">
+                <button type="button" className="chip" aria-pressed={!style.beard} onClick={() => setStyle({ beard: false })}>
+                  Sin barba
+                </button>
+                <button type="button" className="chip" aria-pressed={style.beard} onClick={() => setStyle({ beard: true })}>
+                  Con barba
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-muted">La altura, la silueta y el tono de piel salen de tu Perfil.</p>
+          </div>
+        )}
       </div>
 
       {missingProfile && (

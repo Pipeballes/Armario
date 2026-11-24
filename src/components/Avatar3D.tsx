@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { cameraFor, type BodyDims, type Look, type View } from "@/lib/avatar";
+import type { AvatarStyle } from "@/lib/types";
 
 type V3 = [number, number, number];
 
@@ -32,9 +33,21 @@ function useStripes(color: string, striped: boolean) {
   }, [color, striped]);
 }
 
-function Mat({ color, striped = false, rough = 0.85 }: { color: string; striped?: boolean; rough?: number }) {
+/** Degradé de 3 tonos para el sombreado tipo dibujo animado. */
+let toonGradient: THREE.DataTexture | null = null;
+function getToonGradient() {
+  if (!toonGradient) {
+    toonGradient = new THREE.DataTexture(new Uint8Array([120, 200, 255]), 3, 1, THREE.RedFormat);
+    toonGradient.minFilter = THREE.NearestFilter;
+    toonGradient.magFilter = THREE.NearestFilter;
+    toonGradient.needsUpdate = true;
+  }
+  return toonGradient;
+}
+
+function Mat({ color, striped = false }: { color: string; striped?: boolean; rough?: number }) {
   const map = useStripes(color, striped);
-  return <meshStandardMaterial color={map ? "#ffffff" : color} map={map ?? undefined} roughness={rough} />;
+  return <meshToonMaterial color={map ? "#ffffff" : color} map={map ?? undefined} gradientMap={getToonGradient()} />;
 }
 
 /** Cápsula entre dos puntos (brazos, piernas). */
@@ -64,6 +77,195 @@ function Lathe({ points, children, flat = 0.62 }: { points: [number, number][]; 
   );
 }
 
+
+const HEAD_Y = 1.67;
+const HEAD_R = 0.15;
+
+/** Cabeza estilo caricatura: grande, redonda, con ojos con brillo, cejas, sonrisa y cachetes. Parpadea. */
+function Head({ skin, style, cap }: { skin: string; style: AvatarStyle; cap: boolean }) {
+  const eyes = useRef<THREE.Group>(null);
+  const head = useRef<THREE.Group>(null);
+  const nextBlink = useRef(2);
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    if (head.current) head.current.rotation.z = Math.sin(t * 0.7) * 0.025;
+    if (eyes.current) {
+      if (t > nextBlink.current) {
+        const k = (t - nextBlink.current) / 0.14;
+        eyes.current.scale.y = k < 1 ? Math.abs(1 - 2 * k) * 0.9 + 0.1 : 1;
+        if (k >= 1) nextBlink.current = t + 2.5 + Math.random() * 3;
+      }
+    }
+  });
+  const hair = style.hairColor;
+  const R = HEAD_R;
+  return (
+    <group ref={head} position={[0, HEAD_Y, 0]}>
+      {/* Cara */}
+      <mesh scale={[1, 1.04, 0.96]} castShadow>
+        <sphereGeometry args={[R, 40, 32]} />
+        <Mat color={skin} />
+      </mesh>
+      {/* Orejas */}
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * R * 0.97, -0.005, 0]} scale={[0.55, 1, 0.8]}>
+          <sphereGeometry args={[0.032, 16, 16]} />
+          <Mat color={skin} />
+        </mesh>
+      ))}
+      {/* Ojos con brillo */}
+      <group ref={eyes} position={[0, 0.012, 0]}>
+        {[-1, 1].map((s) => (
+          <group key={s} position={[s * 0.052, 0, R * 0.86]}>
+            <mesh scale={[1, 1.15, 0.6]}>
+              <sphereGeometry args={[0.03, 20, 20]} />
+              <meshBasicMaterial color="#ffffff" />
+            </mesh>
+            <mesh position={[0, -0.002, 0.014]} scale={[1, 1.1, 0.6]}>
+              <sphereGeometry args={[0.02, 20, 20]} />
+              <meshBasicMaterial color="#2a1f1a" />
+            </mesh>
+            <mesh position={[0.007, 0.008, 0.027]}>
+              <sphereGeometry args={[0.0065, 10, 10]} />
+              <meshBasicMaterial color="#ffffff" />
+            </mesh>
+          </group>
+        ))}
+      </group>
+      {/* Cejas */}
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * 0.052, 0.058, R * 0.9]} rotation={[0, 0, Math.PI / 2 + s * 0.12]}>
+          <capsuleGeometry args={[0.006, 0.03, 4, 8]} />
+          <meshBasicMaterial color={hair} />
+        </mesh>
+      ))}
+      {/* Nariz */}
+      <mesh position={[0, -0.018, R * 0.97]}>
+        <sphereGeometry args={[0.014, 16, 16]} />
+        <Mat color={skin} />
+      </mesh>
+      {/* Sonrisa */}
+      <mesh position={[0, -0.05, R * 0.9]} rotation={[0.15, 0, Math.PI]}>
+        <torusGeometry args={[0.026, 0.0055, 8, 24, Math.PI]} />
+        <meshBasicMaterial color="#8a3b2e" />
+      </mesh>
+      {/* Cachetes */}
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * 0.088, -0.03, R * 0.78]} rotation={[0, s * 0.5, 0]} scale={[1, 0.7, 0.25]}>
+          <sphereGeometry args={[0.022, 16, 16]} />
+          <meshBasicMaterial color="#ff8a80" transparent opacity={0.35} />
+        </mesh>
+      ))}
+      {/* Pelo (con gorra se ve solo lo de atrás) */}
+      {!cap && <Hair kind={style.hair} color={hair} />}
+      {cap && (style.hair === "largo" || style.hair === "recogido") && <Hair kind={style.hair} color={hair} backOnly />}
+      {/* Barba */}
+      {style.beard && (
+        <mesh scale={[1.03, 1.06, 1]}>
+          <sphereGeometry args={[R * 1.01, 32, 16, 0, Math.PI, Math.PI * 0.68, Math.PI * 0.26]} />
+          <Mat color={hair} />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
+function Hair({ kind, color, backOnly = false }: { kind: AvatarStyle["hair"]; color: string; backOnly?: boolean }) {
+  const R = HEAD_R;
+  const cap = (h: number, yScale: number) => (
+    <mesh position={[0, 0.012, -0.008]} scale={[1.06, yScale, 1.06]}>
+      <sphereGeometry args={[R, 32, 16, 0, Math.PI * 2, 0, h]} />
+      <Mat color={color} />
+    </mesh>
+  );
+  const curls = useMemo(() => {
+    // Rulos repartidos en 3 anillos alrededor de la cabeza (menos sobre la cara).
+    const out: V3[] = [];
+    const rings: [number, number][] = [
+      [0.15, 4],
+      [0.6, 9],
+      [1.05, 11],
+    ];
+    for (const [theta, n] of rings) {
+      for (let i = 0; i < n; i++) {
+        const phi = (i / n) * Math.PI * 2 + theta;
+        const x = Math.sin(theta) * Math.cos(phi) * R * 1.05;
+        const z = Math.sin(theta) * Math.sin(phi) * R * 1.05;
+        // En el anillo de abajo, no tapar la cara.
+        if (theta > 1 && z > R * 0.35) continue;
+        out.push([x, Math.cos(theta) * R * 1.05 + 0.01, z - 0.01]);
+      }
+    }
+    return out;
+  }, [R]);
+  if (backOnly) {
+    return kind === "largo" ? (
+      <mesh position={[0, -0.12, -0.075]} scale={[1.05, 1, 0.55]}>
+        <capsuleGeometry args={[0.12, 0.14, 8, 16]} />
+        <Mat color={color} />
+      </mesh>
+    ) : (
+      <mesh position={[0, 0.06, -0.15]}>
+        <sphereGeometry args={[0.06, 20, 20]} />
+        <Mat color={color} />
+      </mesh>
+    );
+  }
+  switch (kind) {
+    case "rapado":
+      return cap(Math.PI * 0.36, 0.95);
+    case "rulos":
+      return (
+        <group>
+          {cap(Math.PI * 0.36, 1)}
+          {curls.map((p, i) => (
+            <mesh key={i} position={p}>
+              <sphereGeometry args={[0.045, 14, 14]} />
+              <Mat color={color} />
+            </mesh>
+          ))}
+        </group>
+      );
+    case "largo":
+      return (
+        <group>
+          {cap(Math.PI * 0.4, 1.02)}
+          <mesh position={[0, -0.12, -0.075]} scale={[1.05, 1, 0.55]}>
+            <capsuleGeometry args={[0.12, 0.14, 8, 16]} />
+            <Mat color={color} />
+          </mesh>
+          {[-1, 1].map((s) => (
+            <mesh key={s} position={[s * 0.12, -0.08, 0.02]} scale={[0.4, 1, 0.6]}>
+              <capsuleGeometry args={[0.05, 0.12, 6, 12]} />
+              <Mat color={color} />
+            </mesh>
+          ))}
+        </group>
+      );
+    case "recogido":
+      return (
+        <group>
+          {cap(Math.PI * 0.39, 1.02)}
+          <mesh position={[0, 0.13, -0.11]}>
+            <sphereGeometry args={[0.06, 20, 20]} />
+            <Mat color={color} />
+          </mesh>
+        </group>
+      );
+    default:
+      return (
+        <group>
+          {cap(Math.PI * 0.37, 1.05)}
+          {/* Jopo */}
+          <mesh position={[0.02, R * 0.78, R * 0.5]} rotation={[0.9, 0, -0.35]} scale={[1.5, 0.55, 0.9]}>
+            <sphereGeometry args={[0.055, 20, 16]} />
+            <Mat color={color} />
+          </mesh>
+        </group>
+      );
+  }
+}
+
 function torsoProfile(d: BodyDims, inflate = 0, from = 0.9, to = 1.49): [number, number][] {
   const chest = Math.max(d.waist, d.shoulder * 0.85);
   const pts: [number, number][] = [
@@ -78,7 +280,7 @@ function torsoProfile(d: BodyDims, inflate = 0, from = 0.9, to = 1.49): [number,
   return pts.filter(([, y]) => y >= from - 1e-6 && y <= to + 1e-6).map(([r, y]) => [r + inflate, y]);
 }
 
-function Body({ d, skin, look }: { d: BodyDims; skin: string; look: Look }) {
+function Body({ d, skin, look, style }: { d: BodyDims; skin: string; look: Look; style: AvatarStyle }) {
   const breathe = useRef<THREE.Group>(null);
   useFrame(({ clock }) => {
     if (breathe.current) breathe.current.scale.y = 1 + Math.sin(clock.elapsedTime * 1.6) * 0.004;
@@ -107,24 +309,10 @@ function Body({ d, skin, look }: { d: BodyDims; skin: string; look: Look }) {
 
   return (
     <group ref={breathe}>
-      {/* Cabeza, pelo y cara (los ojos ayudan a saber dónde está el frente) */}
-      <mesh position={[0, 1.64, 0]} scale={[0.95, 1.12, 1]} castShadow>
-        <sphereGeometry args={[0.105, 32, 24]} />
-        <Mat color={skin} rough={0.6} />
-      </mesh>
-      <mesh position={[0, 1.665, -0.01]} scale={[1, 1.05, 1.02]}>
-        <sphereGeometry args={[0.108, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <Mat color="#3b2a20" />
-      </mesh>
-      {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * 0.035, 1.655, 0.095]}>
-          <sphereGeometry args={[0.011, 12, 12]} />
-          <meshStandardMaterial color="#221d18" />
-        </mesh>
-      ))}
-      <mesh position={[0, 1.515, 0]}>
-        <cylinderGeometry args={[0.048, 0.055, 0.1, 20]} />
-        <Mat color={skin} rough={0.6} />
+      <Head skin={skin} style={style} cap={look.accessory?.kind === "cap"} />
+      <mesh position={[0, 1.505, 0]}>
+        <cylinderGeometry args={[0.05, 0.058, 0.08, 20]} />
+        <Mat color={skin} />
       </mesh>
 
       {/* Cuerpo */}
@@ -153,9 +341,9 @@ function Body({ d, skin, look }: { d: BodyDims; skin: string; look: Look }) {
               <Mat color={skin} rough={0.6} />
             </Limb>
             {/* Pies (o calzado) */}
-            <mesh position={[l.ankle[0], look.shoes ? 0.04 : 0.032, 0.045]} castShadow>
-              <boxGeometry args={look.shoes ? [0.105, 0.08, 0.26] : [0.085, 0.06, 0.22]} />
-              <Mat color={look.shoes?.color ?? skin} rough={look.shoes ? 0.5 : 0.6} />
+            <mesh position={[l.ankle[0], 0.045, 0.045]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 1, 0.8]} castShadow>
+              <capsuleGeometry args={[look.shoes ? 0.055 : 0.045, look.shoes ? 0.15 : 0.12, 6, 16]} />
+              <Mat color={look.shoes?.color ?? skin} />
             </mesh>
             {look.shoes?.boots && (
               <mesh position={[l.ankle[0], 0.17, 0.005]} castShadow>
@@ -235,13 +423,13 @@ function Body({ d, skin, look }: { d: BodyDims; skin: string; look: Look }) {
 
       {/* Accesorios */}
       {look.accessory?.kind === "cap" && (
-        <group position={[0, 1.7, 0]}>
-          <mesh scale={[1.02, 0.8, 1.05]}>
-            <sphereGeometry args={[0.112, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <group position={[0, HEAD_Y + 0.03, 0]}>
+          <mesh scale={[1.03, 0.82, 1.03]}>
+            <sphereGeometry args={[HEAD_R * 1.04, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
             <Mat color={look.accessory.color} />
           </mesh>
-          <mesh position={[0, 0.005, 0.11]} rotation={[0.25, 0, 0]}>
-            <boxGeometry args={[0.15, 0.012, 0.09]} />
+          <mesh position={[0, 0.0, HEAD_R * 0.95]} rotation={[0.18, 0, 0]}>
+            <cylinderGeometry args={[0.09, 0.09, 0.012, 24, 1, false, -Math.PI / 2, Math.PI]} />
             <Mat color={look.accessory.color} />
           </mesh>
         </group>
@@ -293,12 +481,14 @@ export default function Avatar3D({
   skin,
   look,
   view,
+  style,
   onUserMove,
 }: {
   dims: BodyDims;
   skin: string;
   look: Look;
   view: View;
+  style: AvatarStyle;
   /** Se llama cuando la persona gira el avatar con el dedo. */
   onUserMove?: () => void;
 }) {
@@ -313,7 +503,7 @@ export default function Avatar3D({
       <directionalLight position={[-3, 2, -2]} intensity={0.5} />
 
       <group scale={dims.scale}>
-        <Body d={dims} skin={skin} look={look} />
+        <Body d={dims} skin={skin} look={look} style={style} />
       </group>
 
       {/* Piso: un círculo en el estudio, o la vereda en la vista de otra persona */}
@@ -329,7 +519,7 @@ export default function Avatar3D({
         enablePan={false}
         enableRotate={!observer}
         enableZoom={!observer}
-        minDistance={1.3}
+        minDistance={0.6}
         maxDistance={5}
         minPolarAngle={0.35}
         maxPolarAngle={1.75}
