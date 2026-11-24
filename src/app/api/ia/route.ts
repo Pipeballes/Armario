@@ -16,7 +16,7 @@ import {
 } from "@/lib/ai-schema";
 
 const MAX_TOTAL_CHARS = 4_000_000; // Vercel acepta hasta 4.5 MB por pedido
-const MAX_PROFILE_PHOTOS = 5;
+const MAX_PROFILE_PHOTOS = 15;
 
 function fail(status: number, message: string) {
   return Response.json({ error: message }, { status });

@@ -10,21 +10,23 @@ import { resizePhoto } from "@/lib/image";
 import { actions, useArmario } from "@/lib/store";
 import { cloudEnabled } from "@/lib/supabase";
 
-const MAX_PHOTOS = 5;
+const MAX_PHOTOS = 15;
 
 const label = (list: readonly { id: string; label: string }[], id: string | null | undefined) =>
   list.find((x) => x.id === id)?.label ?? "No se pudo ver";
 
-/** Convierte una foto guardada (link) en data URL para mandarla a la IA. */
-async function toDataUrl(src: string): Promise<string> {
-  if (src.startsWith("data:")) return src;
-  const blob = await (await fetch(src)).blob();
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result as string);
-    r.onerror = () => reject(new Error("No pude leer una de tus fotos guardadas."));
-    r.readAsDataURL(blob);
-  });
+/**
+ * Convierte una foto guardada (link) en una más chica para mandarla a la IA.
+ * Con muchas fotos se achican más, así entran todas en un solo envío.
+ */
+async function toDataUrl(src: string, count: number): Promise<string> {
+  try {
+    const blob = await (await fetch(src)).blob();
+    const file = new File([blob], "foto.jpg", { type: blob.type || "image/jpeg" });
+    return (await resizePhoto(file, count > 8 ? 560 : count > 5 ? 680 : 800)).dataUrl;
+  } catch {
+    throw new Error("No pude leer una de tus fotos guardadas. Sacala y subila de nuevo.");
+  }
 }
 
 export default function ProfileAnalysis() {
@@ -92,7 +94,7 @@ export default function ProfileAnalysis() {
     setBusy(true);
     setMsg(null);
     try {
-      const images = await Promise.all(photos.map(toDataUrl));
+      const images = await Promise.all(photos.map((p) => toDataUrl(p, photos.length)));
       setResult(await analyzeProfile(images, profile.gender));
     } catch (e) {
       setMsg(
@@ -145,7 +147,7 @@ export default function ProfileAnalysis() {
     <section className="card mb-6 border-accent p-4">
       <p className="mb-1 font-semibold">✨ Tus fotos y lo que ve la IA</p>
       <p className="mb-3 text-sm text-muted">
-        Subí de 1 a {MAX_PHOTOS} fotos tuyas (de frente, de costado, la cara con luz natural). La IA te dice tu subtono,
+        Subí hasta {MAX_PHOTOS} fotos tuyas (de frente, de costado, la cara con luz natural; mientras más, mejor). La IA te dice tu subtono,
         tu tono de piel y tu silueta, y arma tu avatar 3D con tu peinado, color de pelo, barba y anteojos.
       </p>
 
@@ -174,7 +176,7 @@ export default function ProfileAnalysis() {
                   !busy && <span className="font-normal text-muted"> · ✕ para sacar · ＋ para sumar</span>
                 )}
               </p>
-              <div className="mb-3 grid grid-cols-5 gap-2">
+              <div className="mb-3 grid grid-cols-4 gap-2 sm:grid-cols-5">
                 {photos.map((src, i) => (
                   <div key={src.slice(-40) + i} className="relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -25,7 +25,7 @@ async function call<T>(kind: "prenda" | "perfil", images: string[], extra: Recor
 }
 
 export const analyzeGarment = (image: string) => call<GarmentAnalysis>("prenda", [image]);
-/** Analiza de 1 a 5 fotos de la persona juntas, para no quedarse con una sola impresión. */
+/** Analiza de 1 a 15 fotos de la persona juntas, para no quedarse con una sola impresión. */
 export const analyzeProfile = (images: string[], gender?: string | null) =>
   call<ProfileAnalysis>("perfil", images, { gender });
 
