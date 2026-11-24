@@ -6,6 +6,8 @@ import { CATEGORIES, OCCASIONS, WEATHERS, type OccasionId, type Weather } from "
 import { suggestOutfits, type Outfit } from "@/lib/outfits";
 import { actions, useArmario } from "@/lib/store";
 import GarmentPhoto from "@/components/GarmentPhoto";
+import AgendaStrip from "@/components/AgendaStrip";
+import { formatWhen, type AgendaEvent } from "@/lib/agenda";
 import { Chip, ErrorBox, Loading, Section } from "@/components/ui";
 
 // Generador de números pseudoaleatorios con semilla, para que "Otras opciones" sea estable.
@@ -23,6 +25,7 @@ export default function OutfitsPage() {
   const [weather, setWeather] = useState<Weather>("templado");
   const [seed, setSeed] = useState(0);
   const [worn, setWorn] = useState<Outfit | null>(null);
+  const [event, setEvent] = useState<AgendaEvent | null>(null);
 
   const result = useMemo(
     () =>
@@ -47,6 +50,16 @@ export default function OutfitsPage() {
     <div>
       <h1 className="page-title mb-6">¿Qué me pongo?</h1>
 
+      <AgendaStrip
+        selectedId={event?.id ?? null}
+        onSelect={(e) => {
+          setEvent(e);
+          setOccasion(e.occasion);
+          setSeed(0);
+          setWorn(null);
+        }}
+      />
+
       <Section title="Ocasión">
         <div className="flex flex-wrap gap-2">
           {OCCASIONS.map((o) => (
@@ -55,6 +68,7 @@ export default function OutfitsPage() {
               pressed={occasion === o.id}
               onClick={() => {
                 setOccasion(o.id);
+                setEvent(null);
                 reset();
               }}
             >
@@ -80,6 +94,13 @@ export default function OutfitsPage() {
           ))}
         </div>
       </Section>
+
+      {event && (
+        <p className="card mb-4 border-accent p-3 text-sm">
+          📅 Outfit para <strong>{event.title}</strong> · {formatWhen(event)}
+          {event.location ? ` · ${event.location}` : ""}
+        </p>
+      )}
 
       {worn ? (
         <div className="card p-4">

@@ -51,6 +51,10 @@ Primero es para uso personal. Se construye pensando en que más adelante la usen
 4. [ ] Conectar la IA gratis (Gemini) para clasificar fotos y analizar el perfil. (Código listo; falta cargar la clave.)
 5. [ ] Publicar en Vercel e instalarla en el celular.
 
+## Hecho además
+- [x] Conexión con el calendario del iPhone (iCloud) o de Google por link compartido: en "¿Qué me pongo?" aparecen los próximos eventos y se arma el outfit para cada uno.
+- [x] Entrada con código de 6 números por mail (enviado desde Gmail como "Armario").
+
 ## Para más adelante (si se vende)
 - Probarla en uno mismo y mostrar el antes y el después.
 - Videos simples del tipo "una app me vistió una semana".

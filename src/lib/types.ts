@@ -37,6 +37,8 @@ export interface Profile {
   inspiration: string[];
   /** Consejo que dio la IA al analizar una foto. */
   aiAdvice?: string;
+  /** Link del calendario compartido (iCloud o Google) para planear outfits por evento. */
+  calendarUrl?: string;
 }
 
 export const EMPTY_PROFILE: Profile = {
