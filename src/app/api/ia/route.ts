@@ -62,7 +62,10 @@ export async function POST(request: Request) {
   });
 
   // Se prueba el modelo principal y, si no está disponible, el de respaldo.
-  const models = [...new Set([process.env.GEMINI_MODEL || "gemini-3.5-flash-lite", "gemini-2.5-flash"])];
+  // Si uno está saturado o no disponible para la cuenta, se prueba el siguiente.
+  const models = [
+    ...new Set([process.env.GEMINI_MODEL || "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"]),
+  ];
   let res: Response | null = null;
   for (const model of models) {
     res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
