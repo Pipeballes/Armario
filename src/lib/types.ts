@@ -68,11 +68,48 @@ export interface Profile {
   feedback?: { liked: string[]; disliked: string[] };
 }
 
+export type HairId =
+  | "corto"
+  | "costado"
+  | "flequillo"
+  | "despeinado"
+  | "rapado"
+  | "pelado"
+  | "cresta"
+  | "rulos"
+  | "afro"
+  | "ondas"
+  | "melena"
+  | "largo"
+  | "colita"
+  | "rodete"
+  | "recogido"
+  | "trenzas"
+  | "rastas";
+
+export type GlassesId =
+  | "ninguno"
+  | "redondos"
+  | "cuadrados"
+  | "rectangulares"
+  | "gruesos"
+  | "aviador"
+  | "gatubelos"
+  | "sol"
+  | "sol-aviador"
+  | "sol-redondos"
+  | "sol-gatubelos"
+  | "sol-grandes"
+  | "sol-deportivos"
+  | "sol-espejados";
+
 export interface AvatarStyle {
-  hair: "corto" | "largo" | "rapado" | "rulos" | "recogido" | "ondas" | "cresta";
+  hair: HairId;
   hairColor: string;
   beard: boolean;
-  glasses?: "ninguno" | "redondos" | "cuadrados" | "sol";
+  glasses?: GlassesId;
+  /** Color del armazón de los anteojos (si no, el de cada modelo). */
+  glassesColor?: string;
   expression?: "sonrisa" | "feliz" | "serio" | "guino";
 }
 

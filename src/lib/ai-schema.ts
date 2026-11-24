@@ -53,9 +53,15 @@ export interface ProfileAnalysis {
 }
 
 /** Peinados, colores de pelo y anteojos que la IA puede elegir (coinciden con el avatar). */
-export const HAIR_IDS = ["corto", "largo", "rapado", "rulos", "recogido", "ondas", "cresta"] as const;
+export const HAIR_IDS = [
+  "corto", "costado", "flequillo", "despeinado", "rapado", "pelado", "cresta", "rulos", "afro",
+  "ondas", "melena", "largo", "colita", "rodete", "recogido", "trenzas", "rastas",
+] as const;
 export const HAIR_COLOR_IDS = ["negro", "castano-oscuro", "castano-claro", "rubio", "pelirrojo", "gris"] as const;
-export const GLASSES_IDS = ["ninguno", "redondos", "cuadrados", "sol"] as const;
+export const GLASSES_IDS = [
+  "ninguno", "redondos", "cuadrados", "rectangulares", "gruesos", "aviador", "gatubelos",
+  "sol", "sol-aviador", "sol-redondos", "sol-gatubelos", "sol-grandes", "sol-deportivos", "sol-espejados",
+] as const;
 
 const ids = <T extends { id: string }>(xs: readonly T[]) => xs.map((x) => x.id);
 
@@ -93,10 +99,10 @@ export const PROFILE_PROMPT = `Sos un asesor de imagen amable y respetuoso. Mir�
 - skinDepth: clara, media u oscura.
 - bodyType: solo si se ve el cuerpo entero o casi entero. rectangulo (hombros, cintura y cadera parejos), triangulo (cadera más ancha que hombros), triangulo-invertido (hombros más anchos que cadera), ovalo (más volumen en el centro), reloj (cintura marcada). Si no se ve, devolvé null.
 - advice: 2 o 3 frases en español rioplatense, positivas y concretas, sobre qué colores y cortes le favorecen. Nunca hagas comentarios negativos sobre el cuerpo ni sobre el peso.
-- hair: el peinado que más se parece: corto, largo (por debajo de los hombros), rapado, rulos, recogido (atado), ondas (largo medio ondulado) o cresta.
+- hair: el peinado que más se parece: corto (con jopo), costado (raya al costado), flequillo, despeinado, rapado, pelado, cresta, rulos, afro, ondas (largo medio ondulado), melena (carré a la altura del mentón), largo (lacio por debajo de los hombros), colita, rodete (arriba de la cabeza), recogido (atado atrás), trenzas o rastas.
 - hairColor: negro, castano-oscuro, castano-claro, rubio, pelirrojo o gris.
 - beard: true si tiene barba visible, false si no.
-- glasses: ninguno, redondos, cuadrados o sol (si usa anteojos en las fotos).`;
+- glasses: ninguno; recetados: redondos, cuadrados, rectangulares (finos), gruesos, aviador, gatubelos (ojo de gato); de sol: sol (clásicos), sol-aviador, sol-redondos, sol-gatubelos, sol-grandes, sol-deportivos, sol-espejados.`;
 
 /** Agrega al pedido cómo se identifica la persona, para que los consejos se adapten. */
 export function profilePromptFor(gender?: string | null): string {

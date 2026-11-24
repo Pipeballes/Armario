@@ -17,6 +17,8 @@ import {
   HAIRS,
   HAIR_COLORS,
   GLASSES,
+  FRAME_COLORS,
+  glassesById,
   EXPRESSIONS,
   avatarOf,
 } from "@/lib/avatar";
@@ -199,19 +201,42 @@ export default function ProbadorPage() {
             )}
             <div>
               <span className="label">Anteojos</span>
-              <div className="flex flex-wrap gap-2">
-                {GLASSES.map((g) => (
-                  <button
-                    key={g.id}
-                    type="button"
-                    className="chip"
-                    aria-pressed={(style.glasses ?? "ninguno") === g.id}
-                    onClick={() => setStyle({ glasses: g.id })}
-                  >
-                    {g.label}
-                  </button>
-                ))}
-              </div>
+              {(["recetados", "sol"] as const).map((group) => (
+                <div key={group} className="mb-2">
+                  <p className="mb-1 text-xs text-muted">{group === "sol" ? "😎 De sol" : "👓 Recetados"}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {GLASSES.filter((g) => (group === "sol" ? g.sun : !g.sun)).map((g) => (
+                      <button
+                        key={g.id}
+                        type="button"
+                        className="chip"
+                        aria-pressed={(style.glasses ?? "ninguno") === g.id}
+                        onClick={() => setStyle({ glasses: g.id, glassesColor: undefined })}
+                      >
+                        {g.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {(style.glasses ?? "ninguno") !== "ninguno" && (
+                <div>
+                  <p className="mb-1 text-xs text-muted">Color del armazón</p>
+                  <div className="flex flex-wrap gap-2">
+                    {FRAME_COLORS.map((c) => (
+                      <button
+                        key={c.hex}
+                        type="button"
+                        aria-label={`Armazón ${c.label}`}
+                        aria-pressed={(style.glassesColor ?? glassesById(style.glasses).frame) === c.hex}
+                        onClick={() => setStyle({ glassesColor: c.hex })}
+                        className={`h-8 w-8 rounded-full border-2 ${(style.glassesColor ?? glassesById(style.glasses).frame) === c.hex ? "border-accent ring-2 ring-accent/30" : "border-line"}`}
+                        style={{ background: c.hex }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <span className="label">Expresión</span>

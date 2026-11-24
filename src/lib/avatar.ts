@@ -180,20 +180,70 @@ export const DEFAULT_AVATAR: AvatarStyle = {
 };
 
 export const HAIRS: { id: AvatarStyle["hair"]; label: string }[] = [
-  { id: "corto", label: "Corto" },
-  { id: "largo", label: "Largo" },
+  { id: "corto", label: "Corto con jopo" },
+  { id: "costado", label: "Raya al costado" },
+  { id: "flequillo", label: "Con flequillo" },
+  { id: "despeinado", label: "Despeinado" },
   { id: "rapado", label: "Rapado" },
-  { id: "rulos", label: "Rulos" },
-  { id: "recogido", label: "Recogido" },
-  { id: "ondas", label: "Ondas" },
+  { id: "pelado", label: "Pelado" },
   { id: "cresta", label: "Cresta" },
+  { id: "rulos", label: "Rulos" },
+  { id: "afro", label: "Afro" },
+  { id: "ondas", label: "Ondas" },
+  { id: "melena", label: "Melena (carré)" },
+  { id: "largo", label: "Largo lacio" },
+  { id: "colita", label: "Colita" },
+  { id: "rodete", label: "Rodete arriba" },
+  { id: "recogido", label: "Recogido atrás" },
+  { id: "trenzas", label: "Trenzas" },
+  { id: "rastas", label: "Rastas" },
 ];
 
-export const GLASSES: { id: NonNullable<AvatarStyle["glasses"]>; label: string }[] = [
-  { id: "ninguno", label: "Sin anteojos" },
-  { id: "redondos", label: "Redondos" },
-  { id: "cuadrados", label: "Cuadrados" },
-  { id: "sol", label: "De sol" },
+/** Peinados con pelo atrás que se ve aunque tengas gorra. */
+export const HAIR_WITH_BACK: AvatarStyle["hair"][] = ["largo", "recogido", "colita", "trenzas", "melena", "rastas", "ondas"];
+
+export interface GlassesDef {
+  id: NonNullable<AvatarStyle["glasses"]>;
+  label: string;
+  sun: boolean;
+  shape: "round" | "square" | "rect" | "thick" | "aviator" | "cateye" | "oversize" | "sport";
+  /** Color del armazón por defecto. */
+  frame: string;
+  /** Color del vidrio. */
+  lens: string;
+  /** Vidrio espejado (con reflejo de color). */
+  mirror?: boolean;
+}
+
+export const GLASSES: GlassesDef[] = [
+  { id: "ninguno", label: "Sin anteojos", sun: false, shape: "round", frame: "#222", lens: "#cfe8ff" },
+  { id: "redondos", label: "Redondos", sun: false, shape: "round", frame: "#2b2b2b", lens: "#cfe8ff" },
+  { id: "cuadrados", label: "Cuadrados", sun: false, shape: "square", frame: "#2b2b2b", lens: "#cfe8ff" },
+  { id: "rectangulares", label: "Rectangulares finos", sun: false, shape: "rect", frame: "#6b6b6b", lens: "#cfe8ff" },
+  { id: "gruesos", label: "Armazón grueso", sun: false, shape: "thick", frame: "#151515", lens: "#cfe8ff" },
+  { id: "aviador", label: "Aviador", sun: false, shape: "aviator", frame: "#c9a24a", lens: "#cfe8ff" },
+  { id: "gatubelos", label: "Ojo de gato", sun: false, shape: "cateye", frame: "#5a2d1a", lens: "#cfe8ff" },
+  { id: "sol", label: "Clásicos", sun: true, shape: "thick", frame: "#151515", lens: "#1d1f22" },
+  { id: "sol-aviador", label: "Aviador", sun: true, shape: "aviator", frame: "#c9a24a", lens: "#3d4a3a" },
+  { id: "sol-redondos", label: "Redonditos", sun: true, shape: "round", frame: "#c9a24a", lens: "#2a2320" },
+  { id: "sol-gatubelos", label: "Ojo de gato", sun: true, shape: "cateye", frame: "#151515", lens: "#2a1f22" },
+  { id: "sol-grandes", label: "Grandes", sun: true, shape: "oversize", frame: "#6b3f1d", lens: "#3a2a22" },
+  { id: "sol-deportivos", label: "Deportivos", sun: true, shape: "sport", frame: "#ededed", lens: "#2a3550", mirror: true },
+  { id: "sol-espejados", label: "Espejados", sun: true, shape: "square", frame: "#9a9a9a", lens: "#3a7bd5", mirror: true },
+];
+
+export const glassesById = (id: AvatarStyle["glasses"]) => GLASSES.find((g) => g.id === id) ?? GLASSES[0];
+
+/** Colores para el armazón. */
+export const FRAME_COLORS: { hex: string; label: string }[] = [
+  { hex: "#151515", label: "Negro" },
+  { hex: "#6b3f1d", label: "Carey" },
+  { hex: "#c9a24a", label: "Dorado" },
+  { hex: "#a9adb3", label: "Plateado" },
+  { hex: "#ededed", label: "Blanco" },
+  { hex: "#b3261e", label: "Rojo" },
+  { hex: "#1f4e8c", label: "Azul" },
+  { hex: "#e9b7c6", label: "Rosa" },
 ];
 
 export const EXPRESSIONS: { id: NonNullable<AvatarStyle["expression"]>; label: string }[] = [

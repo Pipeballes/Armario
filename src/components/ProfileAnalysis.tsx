@@ -5,7 +5,7 @@ import { BODY_TYPES, PALETTE_BY_UNDERTONE, SKIN_DEPTHS, UNDERTONES, colorById, t
 import { Swatch } from "./ui";
 import { AiUnavailable, analyzeProfile } from "@/lib/ai";
 import type { ProfileAnalysis as Analysis } from "@/lib/ai-schema";
-import { HAIRS, HAIR_COLOR_BY_ID, GLASSES, avatarOf } from "@/lib/avatar";
+import { HAIRS, HAIR_COLOR_BY_ID, GLASSES, avatarOf, glassesById } from "@/lib/avatar";
 import { resizePhoto } from "@/lib/image";
 import { actions, useArmario } from "@/lib/store";
 import { cloudEnabled } from "@/lib/supabase";
@@ -237,7 +237,7 @@ export default function ProfileAnalysis() {
             {result.avatar.hairColor ? ` ${result.avatar.hairColor.replace("-", " ")}` : ""}
             {result.avatar.beard && profile.gender !== "mujer" ? ", con barba" : ""}
             {result.avatar.glasses && result.avatar.glasses !== "ninguno"
-              ? `, anteojos ${label(GLASSES, result.avatar.glasses).toLowerCase()}`
+              ? `, anteojos ${glassesById(result.avatar.glasses).sun ? "de sol " : ""}${label(GLASSES, result.avatar.glasses).toLowerCase()}`
               : ""}
           </p>
           {result.undertone && <Palette undertone={result.undertone} />}
