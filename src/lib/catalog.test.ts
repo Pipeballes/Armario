@@ -98,3 +98,27 @@ describe("talles de calzado US", () => {
     expect(toUSShoe(10, "eu", "hombre")).toBeNull();
   });
 });
+
+describe("cantidad de prendas iguales", () => {
+  it("se pregunta solo en ropa interior, medias y mallas", async () => {
+    const { isCountable, countUnit } = await import("./catalog");
+    expect(isCountable("interior", "calzon")).toBe(true);
+    expect(isCountable("interior", "medias")).toBe(true);
+    expect(isCountable("pijama", "medias")).toBe(true);
+    expect(isCountable("malla", "bikini-arriba")).toBe(true);
+    expect(isCountable("pijama", "remera")).toBe(false);
+    expect(isCountable("top", "remera")).toBe(false);
+    expect(isCountable("bottom", "jean")).toBe(false);
+    expect(countUnit("medias", 3)).toBe("pares");
+    expect(countUnit("calzon", 1)).toBe("igual");
+  });
+});
+
+describe("autoName", () => {
+  it("arma el nombre sin repetir el color", async () => {
+    const { autoName } = await import("./catalog");
+    expect(autoName("Remera", "azul")).toBe("Remera azul");
+    expect(autoName("Jean", "denim")).toBe("Jean");
+    expect(autoName("Campera", "azul-marino")).toBe("Campera azul marino");
+  });
+});

@@ -1,12 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 import GarmentForm from "@/components/GarmentForm";
+import { CATEGORIES, type Category } from "@/lib/catalog";
 import { useArmario } from "@/lib/store";
+import { Loading } from "@/components/ui";
 
 export default function NuevaPrendaPage() {
+  // La categoría puede venir en el link (ej: "Agregar" desde un estante vacío del placard).
+  return (
+    <Suspense fallback={<Loading />}>
+      <NuevaPrenda />
+    </Suspense>
+  );
+}
+
+function NuevaPrenda() {
+  const params = useSearchParams();
+  const pedida = params.get("categoria");
+  const defaultCategory = CATEGORIES.some((c) => c.id === pedida) ? (pedida as Category) : undefined;
   const router = useRouter();
   const { garments } = useArmario();
   const [saved, setSaved] = useState(0);
@@ -36,7 +50,8 @@ export default function NuevaPrendaPage() {
           : "Sacale una foto y completá lo básico. Toma menos de un minuto."}
       </p>
       <GarmentForm
-        key={formKey}
+        key={`${formKey}-${defaultCategory ?? ""}`}
+        defaultCategory={defaultCategory}
         allowAnother
         onDone={(another) => {
           if (another) {

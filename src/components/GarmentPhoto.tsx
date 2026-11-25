@@ -1,12 +1,29 @@
 import type { Garment } from "@/lib/types";
 
-/** Foto de la prenda. Si tiene foto de atrás, se ve al pasar el mouse por encima. */
+/**
+ * Foto de la prenda. Si tiene foto de atrás, se ve al pasar el mouse por encima.
+ * Si hay varias iguales (medias, ropa interior), muestra la cantidad.
+ */
 export default function GarmentPhoto({ garment, className = "" }: { garment: Garment; className?: string }) {
   const base = `aspect-square w-full rounded-xl bg-surface-2 object-cover ${className}`;
+  const qty = garment.quantity && garment.quantity > 1 ? garment.quantity : null;
+  const badge = qty && (
+    <span
+      className="absolute top-1.5 left-1.5 rounded-full bg-accent px-2 text-xs leading-5 font-semibold text-accent-ink shadow"
+      aria-label={`${qty} iguales`}
+    >
+      ×{qty}
+    </span>
+  );
   if (!garment.photoBack) {
-    // Las fotos son data URLs o links firmados, por eso no se usa next/image.
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={garment.photo} alt={garment.name} loading="lazy" className={base} />;
+    return (
+      <span className="relative block">
+        {/* Las fotos son data URLs o links firmados, por eso no se usa next/image. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={garment.photo} alt={garment.name} loading="lazy" className={base} />
+        {badge}
+      </span>
+    );
   }
   return (
     <span className="group relative block">
@@ -25,6 +42,7 @@ export default function GarmentPhoto({ garment, className = "" }: { garment: Gar
       >
         ↻
       </span>
+      {badge}
     </span>
   );
 }

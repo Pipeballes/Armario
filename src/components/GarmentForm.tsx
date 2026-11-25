@@ -7,8 +7,11 @@ import {
   FORMALITY_LABELS,
   SPECIAL_CATEGORIES,
   categoriesFor,
+  autoName,
   categoryView,
+  countUnit,
   groupKinds,
+  isCountable,
   shoeSizesUS,
   toUSShoe,
   kindLabelFor,
@@ -95,14 +98,23 @@ function blank(): Omit<Garment, "id" | "createdAt"> {
 
 export default function GarmentForm({
   initial,
+  defaultCategory,
   onDone,
   allowAnother = false,
 }: {
   initial?: Garment;
+  /** Categoría ya elegida (por ejemplo, al agregar desde un estante vacío del placard). */
+  defaultCategory?: Category;
   onDone: (another: boolean) => void;
   allowAnother?: boolean;
 }) {
-  const [form, setForm] = useState(() => (initial ? { ...initial } : blank()));
+  const [form, setForm] = useState(() =>
+    initial
+      ? { ...initial }
+      : defaultCategory
+        ? { ...blank(), category: defaultCategory, formality: DEFAULT_FORMALITY[defaultCategory] }
+        : blank(),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [colorGuessed, setColorGuessed] = useState(false);
@@ -135,11 +147,20 @@ export default function GarmentForm({
     setAi("working");
     try {
       setAiError(null);
-      const { size, ...r } = await analyzeGarment(photosFor(next), profile.gender);
+      const { size, count, ...r } = await analyzeGarment(photosFor(next), profile.gender);
       // Si la IA eligió un tipo que no corresponde a tu género (o a esa categoría), se deja para que lo elijas vos.
       if (!kindsFor(r.category, profile.gender).some((k) => k.id === r.kind)) r.kind = undefined;
       setForm((f) =>
-        onlySize ? { ...f, size: f.size || size } : { ...f, ...r, name: f.name || r.name, size: f.size || size },
+        onlySize
+          ? { ...f, size: f.size || size }
+          : {
+              ...f,
+              ...r,
+              name: f.name || r.name,
+              size: f.size || size,
+              // Si en la foto hay varias iguales (ej: 5 pares de medias), se completa la cantidad.
+              quantity: count && isCountable(r.category, r.kind) && !f.quantity ? count : f.quantity,
+            },
       );
       if (!onlySize) {
         const cat = categoryView(r.category, profile.gender);
@@ -251,10 +272,9 @@ export default function GarmentForm({
       ...form,
       id: initial?.id ?? newId(),
       createdAt: initial?.createdAt ?? Date.now(),
-      name:
-        form.name.trim() ||
-        `${kindLabel(form, profile.gender) ?? cat.label} ${COLORS.find((c) => c.id === form.color)?.label.toLowerCase()}`,
+      name: form.name.trim() || autoName(kindLabel(form, profile.gender) ?? cat.label, form.color),
       sport: SPECIAL_CATEGORIES.includes(form.category) ? undefined : form.sport,
+      quantity: isCountable(form.category, form.kind) && (form.quantity ?? 1) > 1 ? form.quantity : undefined,
       kind: form.kind,
       kindDetail: form.kind === "otro" ? form.kindDetail?.trim() : undefined,
     };
@@ -439,6 +459,14 @@ export default function GarmentForm({
           )}
         </Section>
       </div>
+
+      {isCountable(form.category, form.kind) && (
+        <QuantityPicker
+          value={form.quantity ?? 1}
+          unit={(n) => countUnit(form.kind, n)}
+          onChange={(n) => update("quantity", n)}
+        />
+      )}
 
       <Section
         title="Color principal"
@@ -656,6 +684,59 @@ function ShoeSize({
           Talle elegido: <strong>{form.size}</strong>
         </p>
       )}
+    </Section>
+  );
+}
+
+/** "¿Cuántas tenés iguales?": para no subir una foto por cada par de medias o calzoncillo igual. */
+function QuantityPicker({
+  value,
+  unit,
+  onChange,
+}: {
+  value: number;
+  unit: (n: number) => string;
+  onChange: (n: number) => void;
+}) {
+  const set = (n: number) => onChange(Math.max(1, Math.min(99, n)));
+  return (
+    <Section
+      title="¿Cuántas tenés iguales?"
+      hint="Si tenés varias del mismo modelo y color, subí una sola foto y poné cuántas son."
+    >
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          className="btn-ghost h-11 w-11 shrink-0 p-0 text-xl"
+          aria-label="Una menos"
+          disabled={value <= 1}
+          onClick={() => set(value - 1)}
+        >
+          −
+        </button>
+        <span className="min-w-24 text-center">
+          <span className="block font-display text-3xl font-semibold" aria-live="polite">
+            {value}
+          </span>
+          <span className="text-xs text-muted">{unit(value)}</span>
+        </span>
+        <button
+          type="button"
+          className="btn-ghost h-11 w-11 shrink-0 p-0 text-xl"
+          aria-label="Una más"
+          disabled={value >= 99}
+          onClick={() => set(value + 1)}
+        >
+          +
+        </button>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {[1, 2, 3, 5, 7, 10].map((n) => (
+          <Chip key={n} pressed={value === n} onClick={() => set(n)}>
+            {n}
+          </Chip>
+        ))}
+      </div>
     </Section>
   );
 }

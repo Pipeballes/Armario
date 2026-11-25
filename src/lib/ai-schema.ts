@@ -32,6 +32,8 @@ export interface GarmentAnalysis {
   warmth: Warmth;
   /** Talle leído de la etiqueta, si se ve. */
   size?: string;
+  /** Cuántas prendas iguales se ven en la foto (ej: 5 pares de medias apilados). */
+  count?: number;
   /** Si es ropa deportiva, de qué deporte. */
   sport?: string;
   /** Tipo dentro de pijama / ropa interior / malla. */
@@ -75,6 +77,7 @@ export const GARMENT_PROMPT = `Sos un asesor de moda. Mirá la foto de UNA prend
 - formality: 1 = para estar en casa o hacer deporte, 3 = casual arreglado, 5 = formal (traje, vestido de fiesta).
 - warmth: light (para calor), medium, warm (abriga mucho).
 - sport: "ninguno" si no es ropa deportiva. Si lo es: el deporte si es claro (botines o camiseta de fútbol → futbol, calzas de running → running, raqueta/pádel → padel-tenis, etc.) o "general" si sirve para entrenar en general.
+- count: cuántas prendas IGUALES se ven en la foto (por ejemplo 5 pares de medias iguales o 3 calzoncillos iguales juntos). Si hay una sola, 1.
 - size: el talle SOLO si se lee en una etiqueta (ej: "M", "XL", "42", "10"). Si no se ve, dejalo vacío; no lo adivines. En calzado devolvé el talle US con el formato "US 9.5" (si la etiqueta solo trae el europeo, el brasileño o el argentino, pasalo a US).`;
 
 export const GARMENT_SCHEMA = {
@@ -88,6 +91,7 @@ export const GARMENT_SCHEMA = {
     formality: { type: "INTEGER" },
     warmth: { type: "STRING", enum: ids(WARMTH) },
     size: { type: "STRING", nullable: true },
+    count: { type: "INTEGER" },
     sport: { type: "STRING", enum: ["ninguno", ...SPORTS.map((x) => x.id)] },
     kind: { type: "STRING", enum: ["ninguno", ...ALL_KIND_IDS] },
   },
@@ -156,6 +160,7 @@ export function parseGarment(raw: unknown): GarmentAnalysis | null {
     formality: Number.isFinite(f) ? Math.min(5, Math.max(1, f)) : 2,
     warmth,
     size: parseSize(r.size),
+    count: Number.isInteger(Number(r.count)) && Number(r.count) > 1 ? Math.min(30, Number(r.count)) : undefined,
     sport: SPECIAL_CATEGORIES.includes(category)
       ? undefined
       : (pick<string>(r.sport, SPORTS.map((x) => x.id)) ?? undefined),

@@ -19,6 +19,8 @@ export interface Garment {
   photoLabel?: string;
   /** Talle (ej: "M", "42", "Único"). */
   size?: string;
+  /** Cuántas iguales hay (medias, ropa interior, mallas). Si falta, es 1. */
+  quantity?: number;
   /** Si es deportiva: id de SPORTS ("general" = para cualquier deporte). */
   sport?: string;
   /** Tipo dentro de pijama / ropa interior / malla (id de KINDS). */

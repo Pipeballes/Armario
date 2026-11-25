@@ -27,6 +27,7 @@ interface GarmentRow {
   kind: string | null;
   kind_detail: string | null;
   fit: Garment["fit"] | null;
+  quantity: number | null;
   created_at: string;
   last_worn: string | null;
 }
@@ -70,6 +71,7 @@ function rowToGarment(r: GarmentRow, urls: Map<string, string>): Garment {
     kind: r.kind ?? undefined,
     kindDetail: r.kind_detail ?? undefined,
     fit: r.fit ?? undefined,
+    quantity: r.quantity && r.quantity > 1 ? r.quantity : undefined,
     name: r.name,
     category: r.category,
     color: r.color,
@@ -136,6 +138,7 @@ export function createCloud(sb: SupabaseClient, userId: string) {
         kind: g.kind || null,
         kind_detail: g.kind === "otro" ? g.kindDetail?.trim() || null : null,
         fit: g.fit ?? null,
+        quantity: Math.max(1, Math.min(99, Math.round(g.quantity ?? 1))),
         created_at: new Date(g.createdAt).toISOString(),
         last_worn: g.lastWorn ? new Date(g.lastWorn).toISOString() : null,
       });

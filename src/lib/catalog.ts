@@ -500,3 +500,42 @@ export function toUSShoe(n: number, from: "eu" | "ar", gender: string | null | u
   }
   return String(Math.round(us * 2) / 2);
 }
+
+/**
+ * Prendas que se suelen tener repetidas iguales (no tiene sentido subir 7 fotos del mismo calzoncillo):
+ * para estas se pregunta la cantidad.
+ */
+const COUNTABLE_KINDS = new Set([
+  "calzon",
+  "boxer",
+  "tanga",
+  "corpino",
+  "corpino-deportivo",
+  "top-interior",
+  "body-interior",
+  "camiseta",
+  "medias",
+  "soquetes",
+  "medias-cancan",
+  "malla-abajo",
+  "sunga",
+  "bikini-arriba",
+  "bikini-abajo",
+]);
+
+export const isCountable = (category: Category, kind: string | undefined) =>
+  Boolean(kind && (category === "interior" || category === "pijama" || category === "malla") && COUNTABLE_KINDS.has(kind));
+
+/** Las medias se cuentan de a pares. */
+export const countUnit = (kind: string | undefined, n: number) => {
+  const pair = kind === "medias" || kind === "soquetes" || kind === "medias-cancan";
+  return pair ? (n === 1 ? "par" : "pares") : n === 1 ? "igual" : "iguales";
+};
+
+/** Nombre automático: "Remera azul". Si el color ya está en el tipo ("Jean" + "jean / denim"), no se repite. */
+export function autoName(kind: string, colorId: string): string {
+  const color = (COLORS.find((c) => c.id === colorId)?.label ?? "").toLowerCase();
+  const first = kind.toLowerCase().split(" ")[0];
+  if (!color || color.includes(first)) return kind;
+  return `${kind} ${color.split(" / ")[0]}`;
+}
