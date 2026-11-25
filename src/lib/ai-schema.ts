@@ -267,31 +267,76 @@ export function parseChoice(raw: unknown, ids: string[]): ChoiceResult | null {
 }
 
 
-/** Para "digitalizar" la prenda: color de la tela y dónde está el estampado, aunque la foto esté torcida. */
-export const FIT_PROMPT = `Mirá esta foto de UNA prenda (puede estar torcida, arrugada, sobre una cama o un piso). La vamos a dibujar en digital, así que necesito:
+/** Para "digitalizar" la prenda: color de la tela, dónde está el estampado y sus detalles, aunque la foto esté torcida. */
+const FIT_BASE = `Mirá esta foto de UNA prenda (puede estar torcida, arrugada, sobre una cama o un piso). La vamos a dibujar en digital, así que necesito:
 - box: [ymin, xmin, ymax, xmax] de la prenda entera (con mangas), en números de 0 a 1000 respecto de la foto.
-- angle: cuántos grados está girada la prenda respecto de estar derecha con el cuello arriba. Positivo si está girada en el sentido de las agujas del reloj, negativo si al revés. Entre -90 y 90. Si está derecha, 0.
+- angle: cuántos grados está girada la prenda respecto de estar derecha con el cuello (o la cintura) arriba. Positivo si está girada en el sentido de las agujas del reloj, negativo si al revés. Entre -90 y 90. Si está derecha, 0.
 - upside_down: true solo si el cuello o la cintura quedaron abajo (la prenda está al revés).
 - fabric: el color principal de la tela en hexadecimal (#rrggbb), sin contar estampados, logos, sombras ni el fondo. Si la tela es blanca, que sea blanco aunque la luz la haga ver gris.
-- has_print: true si tiene un estampado, dibujo, logo o texto visible (no cuentan costuras, etiquetas ni arrugas).
+- has_print: true si tiene un estampado, dibujo, logo o texto suelto visible (no cuentan costuras, etiquetas ni arrugas, ni un dibujo que se repite por toda la tela).
 - print_box: si has_print, [ymin, xmin, ymax, xmax] del estampado principal, ajustado al dibujo (0 a 1000 respecto de la foto). Si no, [0, 0, 0, 0].
-- print_x: si has_print, dónde está el estampado de costado sobre el cuerpo de la prenda (sin contar las mangas), imaginando la prenda derecha y mirándola como en la foto: -1 = borde izquierdo del cuerpo, 0 = centro, 1 = borde derecho. Un logo chico en el pecho del lado izquierdo de la foto sería -0.45.
-- print_y: si has_print, a qué altura está el centro del estampado: 0 = cuello, 0.3 = pecho, 0.5 = medio, 1 = ruedo.
-- print_width: si has_print, qué tan ancho es el estampado comparado con el ancho del cuerpo (0.15 = logo chico, 0.6 = estampado grande).`;
+- print_x: si has_print, dónde está de costado, imaginando la prenda derecha y mirándola como en la foto: -1 = borde izquierdo, 0 = centro, 1 = borde derecho. En una remera se mide sobre el cuerpo sin las mangas (un logo chico en el pecho del lado izquierdo de la foto sería -0.45); en un pantalón o short, sobre el ancho de la prenda (un logo en la pierna izquierda de la foto sería -0.5).
+- print_y: si has_print, a qué altura está el centro: 0 = cuello o cintura, 0.3 = pecho, 0.5 = medio, 1 = ruedo.
+- print_width: si has_print, qué tan ancho es comparado con el ancho de la prenda (0.15 = logo chico, 0.6 = estampado grande).`;
+
+const FIT_DETAILS = `
+Y los detalles, para dibujarla como es (si algo no se ve en la foto, poné lo que tiene una prenda así):
+- trim: color (#rrggbb) de lo que contrasta con la tela: cuello, puños, elástico de la cintura, franjas, tiras, cordones o suela. Si nada contrasta, "".
+- pattern: si TODA la tela tiene un dibujo que se repite: "rayas" (horizontales), "rayas-verticales", "cuadros", "lunares", "flores" o "camuflado". Si es lisa, o tiene un solo estampado o logo, "liso".
+- pattern_color: el segundo color de ese dibujo (#rrggbb), o "".
+- buttons: cuántos botones tiene al frente (0 si ninguno).
+- hood: true si tiene capucha.
+- drawstring: true si tiene cordón en la cintura o en la capucha.
+- elastic_waist: true si la cintura es elastizada.
+- side_stripes: true si tiene franjas a los costados, de arriba abajo.
+- pockets: "ninguno", "pecho" (bolsillo en el pecho), "canguro", "jean" (bolsillos de jean), "cargo" (bolsillos grandes a los costados de las piernas) o "parche" (bolsillos cosidos por fuera).
+- leg_length: solo en partes de abajo: "micro" (muy corto), "muslo" (a mitad del muslo), "rodilla" o "largo". Si no es una parte de abajo, "".
+- sleeves: solo en partes de arriba y abrigos: "sin", "cortas" o "largas". Si no tiene mangas que mirar, "".
+- strap: solo en calzado abierto: "dedo" (ojota con la tira entre los dedos), "ancha" (una tira ancha sobre el pie) o "tiras" (sandalia con varias tiras). Si no, "".`;
+
+/** Instrucciones para el ajuste; si se sabe qué prenda es, la IA busca mejor sus detalles. */
+export function fitPrompt(context?: { category?: string; kind?: string }): string {
+  const what = [context?.category, context?.kind].filter((x) => x && /^[a-z-]{1,30}$/.test(x)).join(", ");
+  return FIT_BASE + FIT_DETAILS + (what ? `\nLa persona dijo que la prenda es: ${what}.` : "");
+}
+export const FIT_PROMPT = fitPrompt();
+
+const FIT_BASE_PROPS = {
+  box: { type: "ARRAY", items: { type: "INTEGER" } },
+  angle: { type: "NUMBER" },
+  upside_down: { type: "BOOLEAN" },
+  fabric: { type: "STRING" },
+  has_print: { type: "BOOLEAN" },
+  print_box: { type: "ARRAY", items: { type: "INTEGER" } },
+  print_x: { type: "NUMBER" },
+  print_y: { type: "NUMBER" },
+  print_width: { type: "NUMBER" },
+};
 
 export const FIT_SCHEMA = {
   type: "OBJECT",
   properties: {
-    box: { type: "ARRAY", items: { type: "INTEGER" } },
-    angle: { type: "NUMBER" },
-    upside_down: { type: "BOOLEAN" },
-    fabric: { type: "STRING" },
-    has_print: { type: "BOOLEAN" },
-    print_box: { type: "ARRAY", items: { type: "INTEGER" } },
-    print_x: { type: "NUMBER" },
-    print_y: { type: "NUMBER" },
-    print_width: { type: "NUMBER" },
+    ...FIT_BASE_PROPS,
+    trim: { type: "STRING" },
+    pattern: { type: "STRING", enum: ["liso", "rayas", "rayas-verticales", "cuadros", "lunares", "flores", "camuflado"] },
+    pattern_color: { type: "STRING" },
+    buttons: { type: "INTEGER" },
+    hood: { type: "BOOLEAN" },
+    drawstring: { type: "BOOLEAN" },
+    elastic_waist: { type: "BOOLEAN" },
+    side_stripes: { type: "BOOLEAN" },
+    pockets: { type: "STRING", enum: ["ninguno", "pecho", "canguro", "jean", "cargo", "parche"] },
+    leg_length: { type: "STRING", enum: ["", "micro", "muslo", "rodilla", "largo"] },
+    sleeves: { type: "STRING", enum: ["", "sin", "cortas", "largas"] },
+    strap: { type: "STRING", enum: ["", "dedo", "ancha", "tiras"] },
   },
+  required: ["box", "angle", "fabric", "has_print"],
+};
+
+/** Si el modelo no acepta el formato completo, se pide solo lo básico (sin detalles). */
+export const FIT_SCHEMA_BASIC = {
+  type: "OBJECT",
+  properties: FIT_BASE_PROPS,
   required: ["box", "angle", "fabric", "has_print"],
 };
 
@@ -307,6 +352,40 @@ const clamp = (n: unknown, lo: number, hi: number, dflt: number) => {
   return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : dflt;
 };
 
+const HEX = /^#[0-9a-f]{6}$/i;
+const hexOr = (v: unknown): string | undefined =>
+  typeof v === "string" && HEX.test(v.trim()) ? v.trim().toLowerCase() : undefined;
+const oneOf = <T extends string>(v: unknown, options: readonly T[]): T | undefined =>
+  typeof v === "string" && (options as readonly string[]).includes(v) ? (v as T) : undefined;
+
+/** Detalles de la prenda (solo lo que vino bien formado; lo demás se completa según el tipo). */
+export function parseDetails(r: Record<string, unknown>): import("./types").GarmentDetails | undefined {
+  const d: import("./types").GarmentDetails = {};
+  const trim = hexOr(r.trim);
+  if (trim) d.trim = trim;
+  const pattern = oneOf(r.pattern, ["rayas", "rayas-verticales", "cuadros", "lunares", "flores", "camuflado"] as const);
+  if (pattern) {
+    d.pattern = pattern;
+    const pc = hexOr(r.pattern_color);
+    if (pc) d.patternColor = pc;
+  }
+  const buttons = Number(r.buttons);
+  if (Number.isFinite(buttons) && buttons > 0) d.buttons = Math.min(12, Math.round(buttons));
+  if (r.hood === true) d.hood = true;
+  if (r.drawstring === true) d.drawstring = true;
+  if (r.elastic_waist === true) d.elastic = true;
+  if (r.side_stripes === true) d.sideStripes = true;
+  const pockets = oneOf(r.pockets, ["pecho", "canguro", "jean", "cargo", "parche"] as const);
+  if (pockets) d.pockets = pockets;
+  const leg = oneOf(r.leg_length, ["micro", "muslo", "rodilla", "largo"] as const);
+  if (leg) d.legLength = leg;
+  const sleeves = oneOf(r.sleeves, ["sin", "cortas", "largas"] as const);
+  if (sleeves) d.sleeves = sleeves;
+  const strap = oneOf(r.strap, ["dedo", "ancha", "tiras"] as const);
+  if (strap) d.strap = strap;
+  return Object.keys(d).length ? d : undefined;
+}
+
 export function parseFit(raw: unknown): import("./types").GarmentFit | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
@@ -314,11 +393,11 @@ export function parseFit(raw: unknown): import("./types").GarmentFit | null {
   if (!box || box[2] - box[0] < 0.05 || box[3] - box[1] < 0.05) return null;
   let angle = clamp(r.angle, -90, 90, 0);
   if (r.upside_down === true) angle += 180;
-  const fabric = typeof r.fabric === "string" && /^#[0-9a-f]{6}$/i.test(r.fabric.trim()) ? r.fabric.trim().toLowerCase() : null;
+  const fabric = hexOr(r.fabric);
   if (!fabric) return null;
   const pbox = r.has_print === true ? toBox(r.print_box) : null;
   return {
-    v: 2,
+    v: 3,
     angle: Math.round(angle * 10) / 10,
     box,
     fabric,
@@ -330,5 +409,6 @@ export function parseFit(raw: unknown): import("./types").GarmentFit | null {
           width: Math.round(clamp(r.print_width, 0.05, 0.95, 0.4) * 100) / 100,
         }
       : undefined,
+    details: parseDetails(r),
   };
 }

@@ -73,6 +73,37 @@ export interface Profile {
 }
 
 /** Dónde está la prenda en la foto, cuánto está girada y de qué color es la tela. */
+/** Dibujo que se repite en toda la tela (no un estampado suelto ni un logo). */
+export type PatternKind = "rayas" | "rayas-verticales" | "cuadros" | "lunares" | "flores" | "camuflado";
+
+/**
+ * Detalles de la prenda que la IA ve en la foto, para dibujarla como es. Todos son opcionales:
+ * lo que falte se completa según el tipo de prenda (una camisa siempre lleva botones, aunque no se vean).
+ */
+export interface GarmentDetails {
+  /** Color de lo que contrasta con la tela: cuello, puños, elástico, franjas, tiras, cordones. */
+  trim?: string;
+  pattern?: PatternKind;
+  /** Segundo color del dibujo de la tela. */
+  patternColor?: string;
+  /** Botones que se ven al frente. */
+  buttons?: number;
+  hood?: boolean;
+  /** Cordón en la cintura o en la capucha. */
+  drawstring?: boolean;
+  /** Cintura elastizada (jogging, short deportivo, calza). */
+  elastic?: boolean;
+  /** Franjas a los costados, de arriba abajo. */
+  sideStripes?: boolean;
+  pockets?: "pecho" | "canguro" | "jean" | "cargo" | "parche";
+  /** Largo de la pierna (partes de abajo). */
+  legLength?: "micro" | "muslo" | "rodilla" | "largo";
+  /** Largo de las mangas (partes de arriba y abrigos). */
+  sleeves?: "sin" | "cortas" | "largas";
+  /** Tira del calzado abierto: entre los dedos (ojota), una ancha (chancla) o varias (sandalia). */
+  strap?: "dedo" | "ancha" | "tiras";
+}
+
 export interface GarmentFit {
   /** Versión del cálculo (si cambia, se vuelve a pedir a la IA). */
   v?: number;
@@ -92,10 +123,11 @@ export interface GarmentFit {
     /** Ancho del estampado comparado con el ancho del cuerpo (0 a 1). */
     width: number;
   };
+  details?: GarmentDetails;
 }
 
 /** Versión actual del ajuste de fotos. */
-export const FIT_VERSION = 2;
+export const FIT_VERSION = 3;
 
 export type HairId =
   | "corto"

@@ -7,8 +7,9 @@ import {
   GARMENT_PROMPT,
   GARMENT_SCHEMA,
   GARMENT_SCHEMA_SIMPLE,
-  FIT_PROMPT,
   FIT_SCHEMA,
+  FIT_SCHEMA_BASIC,
+  fitPrompt,
   parseFit,
   PROFILE_SCHEMA,
   profilePromptFor,
@@ -101,7 +102,16 @@ export async function POST(request: Request) {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? null;
   if (!(await userFromToken(token))) return fail(401, "Iniciá sesión para usar la IA.");
 
-  let body: { kind?: string; image?: string; images?: string[]; sides?: unknown; choose?: ChooseRequest; gender?: string };
+  let body: {
+    kind?: string;
+    image?: string;
+    images?: string[];
+    sides?: unknown;
+    choose?: ChooseRequest;
+    gender?: string;
+    category?: unknown;
+    garmentKind?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
@@ -129,7 +139,17 @@ export async function POST(request: Request) {
     const m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(typeof img === "string" ? img : "");
     if (!m) return fail(400, "La foto no es válida.");
     if (m[2].length > MAX_TOTAL_CHARS) return fail(413, "La foto es muy pesada.");
-    const r = await askGemini(apiKey, [{ inline_data: { mime_type: m[1], data: m[2] } }, { text: FIT_PROMPT }], FIT_SCHEMA);
+    // Qué prenda dijo la persona que es (solo identificadores del catálogo), para buscar sus detalles.
+    const context = {
+      category: typeof body.category === "string" ? body.category : undefined,
+      kind: typeof body.garmentKind === "string" ? body.garmentKind : undefined,
+    };
+    const r = await askGemini(
+      apiKey,
+      [{ inline_data: { mime_type: m[1], data: m[2] } }, { text: fitPrompt(context) }],
+      FIT_SCHEMA,
+      FIT_SCHEMA_BASIC,
+    );
     if ("error" in r) return r.error;
     const fit = parseFit(r.data);
     if (!fit) {

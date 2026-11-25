@@ -207,10 +207,10 @@ export default function GarmentForm({
         // Foto nueva: el ajuste anterior ya no sirve.
         ...(side !== "label" ? { fit: { ...f.fit, [side]: undefined } } : {}),
       }));
-      // En segundo plano, la IA ubica la prenda en la foto (giro, caja, color de tela) para el avatar 3D.
+      // En segundo plano, la IA ubica la prenda en la foto (giro, caja, color de tela, detalles) para el avatar 3D.
       if (account && side !== "label") {
         const token = (fitToken.current[side] = (fitToken.current[side] ?? 0) + 1);
-        analyzeFit(dataUrl)
+        analyzeFit(dataUrl, { category: form.category, kind: form.kind })
           .then((fit) => {
             if (fitToken.current[side] !== token) return; // ya subiste otra foto
             setForm((f) => ({ ...f, fit: { ...f.fit, [side]: fit } }));

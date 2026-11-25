@@ -21,9 +21,11 @@ export async function ensureFit(g: Garment): Promise<boolean> {
   if (!needsFit(g) || pending.has(g.id)) return false;
   pending.add(g.id);
   try {
+    const what = { category: g.category, kind: g.kind };
+    const analyze = (src: string) => urlToDataUrl(src, 1000).then((img) => analyzeFit(img, what));
     const [front, back] = await Promise.all([
-      g.photo && stale(g.fit?.front) ? urlToDataUrl(g.photo, 1000).then(analyzeFit) : Promise.resolve(g.fit?.front),
-      g.photoBack && stale(g.fit?.back) ? urlToDataUrl(g.photoBack, 1000).then(analyzeFit) : Promise.resolve(g.fit?.back),
+      g.photo && stale(g.fit?.front) ? analyze(g.photo) : Promise.resolve(g.fit?.front),
+      g.photoBack && stale(g.fit?.back) ? analyze(g.photoBack) : Promise.resolve(g.fit?.back),
     ]);
     await actions.saveGarment({ ...g, fit: { front, back } });
     return true;
@@ -33,4 +35,14 @@ export async function ensureFit(g: Garment): Promise<boolean> {
   } finally {
     pending.delete(g.id);
   }
+}
+
+/**
+ * Acomoda varias prendas, de a una (para no gastar de golpe el cupo de la IA). Devuelve true si
+ * cambió alguna.
+ */
+export async function ensureFits(garments: Garment[]): Promise<boolean> {
+  let changed = false;
+  for (const g of garments) if (await ensureFit(g)) changed = true;
+  return changed;
 }

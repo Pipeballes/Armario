@@ -54,5 +54,9 @@ export async function chooseOutfit(choose: import("./ai-schema").ChooseRequest):
   return data;
 }
 
-/** Dónde está la prenda en la foto, cuánto está girada y el color de la tela (para vestir el avatar). */
-export const analyzeFit = (image: string) => call<import("./types").GarmentFit>("ajuste", [image]);
+/**
+ * Dónde está la prenda en la foto, cuánto está girada, el color de la tela y sus detalles (para
+ * vestir el avatar). Con la categoría y el tipo, la IA sabe qué detalles buscar.
+ */
+export const analyzeFit = (image: string, garment?: { category?: string; kind?: string }) =>
+  call<import("./types").GarmentFit>("ajuste", [image], { category: garment?.category, garmentKind: garment?.kind });
