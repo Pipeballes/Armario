@@ -72,13 +72,28 @@ export interface Profile {
 
 /** Dónde está la prenda en la foto, cuánto está girada y de qué color es la tela. */
 export interface GarmentFit {
+  /** Versión del cálculo (si cambia, se vuelve a pedir a la IA). */
+  v?: number;
   /** Grados que está girada (positivo = en sentido horario). */
   angle: number;
   /** Caja de la prenda entera en la foto: [x0, y0, x1, y1] de 0 a 1. */
   box: [number, number, number, number];
   /** Color principal de la tela (#rrggbb). */
   fabric: string;
+  /** Estampado o logo principal, para dibujarlo como calcomanía sobre la prenda digital. */
+  print?: {
+    /** Caja del estampado en la foto: [x0, y0, x1, y1] de 0 a 1. */
+    box: [number, number, number, number];
+    /** Dónde va sobre el cuerpo: x de -1 (borde izquierdo, mirando la foto) a 1; y de 0 (cuello) a 1 (ruedo). */
+    x: number;
+    y: number;
+    /** Ancho del estampado comparado con el ancho del cuerpo (0 a 1). */
+    width: number;
+  };
 }
+
+/** Versión actual del ajuste de fotos. */
+export const FIT_VERSION = 2;
 
 export type HairId =
   | "corto"

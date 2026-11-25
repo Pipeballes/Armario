@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { HAIR_WITH_BACK, cameraFor, glassesById, type BodyDims, type GlassesDef, type Look, type View } from "@/lib/avatar";
-import { buildShirtTexture } from "@/lib/shirt-texture";
+import { buildPrintDecal } from "@/lib/shirt-texture";
 import type { AvatarStyle, GarmentFit } from "@/lib/types";
 
 type V3 = [number, number, number];
@@ -625,29 +625,22 @@ function Hair({ kind, color, backOnly = false }: { kind: AvatarStyle["hair"]; co
   );
 }
 
-/**
- * La prenda real para el torso: la foto enderezada y recortada (sin mangas ni fondo) y el color de la tela.
- * Se arma en el navegador a partir de la foto y del ajuste de la IA.
- */
-function useShirtTexture(
-  src: string | undefined,
-  fit: GarmentFit | undefined,
-  hint?: string,
-): { tex: THREE.Texture; fabric: string } | null {
-  const [state, setState] = useState<{ key: string; tex: THREE.Texture; fabric: string } | null>(null);
-  const key = src ? `${src}|${fit ? JSON.stringify(fit) : ""}|${hint ?? ""}` : "";
+/** Calcomanía del estampado (recortado de la foto, derecho y sin la tela de alrededor). */
+function usePrintDecal(src: string | undefined, fit: GarmentFit | undefined): { tex: THREE.Texture; aspect: number } | null {
+  const [state, setState] = useState<{ key: string; tex: THREE.Texture; aspect: number } | null>(null);
+  const key = src && fit?.print ? `${src}|${JSON.stringify(fit)}` : "";
   useEffect(() => {
-    if (!src) return;
+    if (!key || !src || !fit) return;
     let alive = true;
     let made: THREE.Texture | null = null;
-    buildShirtTexture(src, fit, hint)
+    buildPrintDecal(src, fit)
       .then((r) => {
         if (!r) return;
         const t = new THREE.CanvasTexture(r.canvas);
         t.colorSpace = THREE.SRGBColorSpace;
         t.anisotropy = 4;
         made = t;
-        if (alive) setState({ key, tex: t, fabric: r.fabric });
+        if (alive) setState({ key, tex: t, aspect: r.aspect });
         else t.dispose();
       })
       .catch(() => {});
@@ -655,51 +648,87 @@ function useShirtTexture(
       alive = false;
       made?.dispose();
     };
-    // fit va dentro de key.
+    // src y fit van dentro de key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   return state && state.key === key ? state : null;
 }
 
-/** El estampado de la remera: la foto pegada sobre el pecho (y la de atrás en la espalda). */
-function PrintPanel({ d, tex, back = false }: { d: BodyDims; tex: THREE.Texture | undefined; back?: boolean }) {
+/**
+ * Pega la calcomanía sobre el torso, en el lugar y del tamaño que dijo la IA
+ * (x de -1 a 1 sobre el ancho del cuerpo, y de 0 = cuello a 1 = ruedo, ancho relativo al cuerpo).
+ */
+function PrintDecal({
+  d,
+  tex,
+  aspect,
+  place,
+  back = false,
+}: {
+  d: BodyDims;
+  tex: THREE.Texture;
+  aspect: number;
+  place: NonNullable<GarmentFit["print"]>;
+  back?: boolean;
+}) {
   const geom = useMemo(() => {
-    // Perfil del torso con más puntos para que la foto no se deforme.
-    const base = topProfile(d, SHIRT_INFLATE + 0.004);
+    const prof = topProfile(d, SHIRT_INFLATE + 0.005);
     const at = (y: number) => {
-      for (let i = 1; i < base.length; i++) {
-        const [r0, y0] = base[i - 1];
-        const [r1, y1] = base[i];
+      for (let i = 1; i < prof.length; i++) {
+        const [r0, y0] = prof[i - 1];
+        const [r1, y1] = prof[i];
         if (y <= y1 && y1 > y0) return r0 + ((r1 - r0) * (y - y0)) / (y1 - y0);
       }
-      return base[base.length - 1][0];
+      return prof[prof.length - 1][0];
     };
+    const chest = at(1.25);
+    // Ancho y alto de la calcomanía (en metros del avatar), sin deformar el dibujo.
+    let w = place.width * 2 * chest * 0.92;
+    let h = w / Math.max(0.2, aspect);
+    const maxH = (PANEL_TOP - PANEL_BOTTOM) * 0.85;
+    if (h > maxH) {
+      w *= maxH / h;
+      h = maxH;
+    }
+    const cxw = place.x * chest * 0.85 * (back ? -1 : 1);
+    const cy = PANEL_TOP - place.y * (PANEL_TOP - PANEL_BOTTOM);
+    const y0 = Math.max(PANEL_BOTTOM, cy - h / 2);
+    const y1 = Math.min(PANEL_TOP - 0.01, y0 + h);
     const pts: THREE.Vector2[] = [];
-    for (let k = 0; k <= 16; k++) {
-      const y = PANEL_BOTTOM + (k / 16) * (PANEL_TOP - PANEL_BOTTOM);
+    for (let k = 0; k <= 10; k++) {
+      const y = y0 + (k / 10) * (y1 - y0);
       pts.push(new THREE.Vector2(at(y), y));
     }
-    // Cubre todo el frente (o la espalda) del torso.
-    const span = 2.7;
-    const g = new THREE.LatheGeometry(pts, 32, (back ? Math.PI : 0) - span / 2, span);
-    // Se pega la foto "de frente" (por posición, no por ángulo): así no se estira hacia los costados.
+    const xl = cxw - w / 2;
+    const xr = cxw + w / 2;
+    const phi = (x: number) => Math.asin(Math.max(-0.98, Math.min(0.98, x / chest)));
+    // De frente, x = r·sen(φ); de espaldas, φ arranca en π.
+    const p0 = back ? Math.PI - phi(xr) : phi(xl);
+    const p1 = back ? Math.PI - phi(xl) : phi(xr);
+    const g = new THREE.LatheGeometry(pts, 24, p0, p1 - p0);
+    // Se pega "de frente": la posición en x define la textura, así el dibujo no se estira.
     const pos = g.attributes.position;
     const uv = g.attributes.uv;
-    const half = Math.sin(span / 2);
     for (let i = 0; i < pos.count; i++) {
-      const y = pos.getY(i);
-      const r = at(y) || 1;
-      const u = 0.5 + (back ? -1 : 1) * (pos.getX(i) / (2 * r * half));
-      uv.setX(i, Math.min(1, Math.max(0, u)));
+      const x = pos.getX(i);
+      const u = back ? (xr - x) / (xr - xl) : (x - xl) / (xr - xl);
+      uv.setXY(i, Math.min(1, Math.max(0, u)), (pos.getY(i) - y0) / (y1 - y0));
     }
     uv.needsUpdate = true;
     return g;
-  }, [d, back]);
+  }, [d, aspect, place, back]);
   useEffect(() => () => geom.dispose(), [geom]);
-  if (!tex) return null;
   return (
-    <mesh geometry={geom} scale={[1, 1, 0.62]}>
-      <meshToonMaterial map={tex} gradientMap={getToonGradient()} side={THREE.DoubleSide} />
+    <mesh geometry={geom} scale={[1, 1, 0.62]} renderOrder={2}>
+      <meshToonMaterial
+        map={tex}
+        gradientMap={getToonGradient()}
+        transparent
+        alphaTest={0.08}
+        side={THREE.DoubleSide}
+        polygonOffset
+        polygonOffsetFactor={-2}
+      />
     </mesh>
   );
 }
@@ -752,9 +781,10 @@ function Body({ d, skin, look, style }: { d: BodyDims; skin: string; look: Look;
   // Si no elegiste nada, el avatar lleva una remera y un short básicos grises.
   const top = look.top ?? { color: "#d6d0c6", striped: false, sleeves: "short" as const, dress: "none" as const };
   // Estampado real: la foto de la prenda en el pecho y la espalda; el resto toma el color de la tela.
-  const printFront = useShirtTexture(look.top?.print?.front, look.top?.print?.fitFront, look.top?.color);
-  const printBack = useShirtTexture(look.top?.print?.back, look.top?.print?.fitBack, look.top?.color);
-  const topColor = printFront?.fabric ?? look.top?.print?.fitFront?.fabric ?? top.color;
+  // Prenda digital: el color de la tela que vio la IA, y el estampado como calcomanía.
+  const decalFront = usePrintDecal(look.top?.print?.front, look.top?.print?.fitFront);
+  const decalBack = usePrintDecal(look.top?.print?.back, look.top?.print?.fitBack);
+  const topColor = look.top?.print?.fitFront?.fabric ?? top.color;
   const bottom =
     look.bottom ?? (look.top && look.top.dress !== "none" ? null : { color: "#8f8a82", striped: false, kind: "shorts" as const });
   const outer = look.outerwear;
@@ -855,8 +885,12 @@ function Body({ d, skin, look, style }: { d: BodyDims; skin: string; look: Look;
           <Mat color={topColor} striped={top.striped} />
         </Lathe>
       )}
-      {printFront && !outer && <PrintPanel d={d} tex={printFront.tex} />}
-      {printBack && !outer && <PrintPanel d={d} tex={printBack.tex} back />}
+      {decalFront && !outer && look.top?.print?.fitFront?.print && (
+        <PrintDecal d={d} tex={decalFront.tex} aspect={decalFront.aspect} place={look.top.print.fitFront.print} />
+      )}
+      {decalBack && !outer && look.top?.print?.fitBack?.print && (
+        <PrintDecal d={d} tex={decalBack.tex} aspect={decalBack.aspect} place={look.top.print.fitBack.print} back />
+      )}
       {top && top.dress !== "none" && (
         <Lathe
           points={[

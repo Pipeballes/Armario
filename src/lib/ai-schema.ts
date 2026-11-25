@@ -262,12 +262,17 @@ export function parseChoice(raw: unknown, ids: string[]): ChoiceResult | null {
 }
 
 
-/** Para vestir el avatar: dónde está la prenda en la foto, cuánto está girada y el color de la tela. */
-export const FIT_PROMPT = `Mirá esta foto de UNA prenda (puede estar torcida, sobre una cama o un piso). Devolvé:
+/** Para "digitalizar" la prenda: color de la tela y dónde está el estampado, aunque la foto esté torcida. */
+export const FIT_PROMPT = `Mirá esta foto de UNA prenda (puede estar torcida, arrugada, sobre una cama o un piso). La vamos a dibujar en digital, así que necesito:
 - box: [ymin, xmin, ymax, xmax] de la prenda entera (con mangas), en números de 0 a 1000 respecto de la foto.
 - angle: cuántos grados está girada la prenda respecto de estar derecha con el cuello arriba. Positivo si está girada en el sentido de las agujas del reloj, negativo si al revés. Entre -90 y 90. Si está derecha, 0.
 - upside_down: true solo si el cuello o la cintura quedaron abajo (la prenda está al revés).
-- fabric: el color principal de la tela en hexadecimal (#rrggbb), sin contar estampados, logos, sombras ni el fondo.`;
+- fabric: el color principal de la tela en hexadecimal (#rrggbb), sin contar estampados, logos, sombras ni el fondo. Si la tela es blanca, que sea blanco aunque la luz la haga ver gris.
+- has_print: true si tiene un estampado, dibujo, logo o texto visible (no cuentan costuras, etiquetas ni arrugas).
+- print_box: si has_print, [ymin, xmin, ymax, xmax] del estampado principal, ajustado al dibujo (0 a 1000 respecto de la foto). Si no, [0, 0, 0, 0].
+- print_x: si has_print, dónde está el estampado de costado sobre el cuerpo de la prenda (sin contar las mangas), imaginando la prenda derecha y mirándola como en la foto: -1 = borde izquierdo del cuerpo, 0 = centro, 1 = borde derecho. Un logo chico en el pecho del lado izquierdo de la foto sería -0.45.
+- print_y: si has_print, a qué altura está el centro del estampado: 0 = cuello, 0.3 = pecho, 0.5 = medio, 1 = ruedo.
+- print_width: si has_print, qué tan ancho es el estampado comparado con el ancho del cuerpo (0.15 = logo chico, 0.6 = estampado grande).`;
 
 export const FIT_SCHEMA = {
   type: "OBJECT",
@@ -276,22 +281,49 @@ export const FIT_SCHEMA = {
     angle: { type: "NUMBER" },
     upside_down: { type: "BOOLEAN" },
     fabric: { type: "STRING" },
+    has_print: { type: "BOOLEAN" },
+    print_box: { type: "ARRAY", items: { type: "INTEGER" } },
+    print_x: { type: "NUMBER" },
+    print_y: { type: "NUMBER" },
+    print_width: { type: "NUMBER" },
   },
-  required: ["box", "angle", "fabric"],
+  required: ["box", "angle", "fabric", "has_print"],
+};
+
+const toBox = (raw: unknown): [number, number, number, number] | null => {
+  const b = Array.isArray(raw) ? raw.map(Number) : [];
+  if (b.length !== 4 || b.some((n) => !Number.isFinite(n))) return null;
+  const [ymin, xmin, ymax, xmax] = b.map((n) => Math.min(1, Math.max(0, n / 1000)));
+  if (xmax - xmin < 0.01 || ymax - ymin < 0.01) return null;
+  return [xmin, ymin, xmax, ymax];
+};
+const clamp = (n: unknown, lo: number, hi: number, dflt: number) => {
+  const v = Number(n);
+  return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : dflt;
 };
 
 export function parseFit(raw: unknown): import("./types").GarmentFit | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
-  const b = Array.isArray(r.box) ? r.box.map(Number) : [];
-  if (b.length !== 4 || b.some((n) => !Number.isFinite(n))) return null;
-  const [ymin, xmin, ymax, xmax] = b.map((n) => Math.min(1, Math.max(0, n / 1000)));
-  if (xmax - xmin < 0.05 || ymax - ymin < 0.05) return null;
-  let angle = Number(r.angle);
-  if (!Number.isFinite(angle)) angle = 0;
-  angle = Math.max(-90, Math.min(90, angle));
+  const box = toBox(r.box);
+  if (!box || box[2] - box[0] < 0.05 || box[3] - box[1] < 0.05) return null;
+  let angle = clamp(r.angle, -90, 90, 0);
   if (r.upside_down === true) angle += 180;
   const fabric = typeof r.fabric === "string" && /^#[0-9a-f]{6}$/i.test(r.fabric.trim()) ? r.fabric.trim().toLowerCase() : null;
   if (!fabric) return null;
-  return { angle: Math.round(angle * 10) / 10, box: [xmin, ymin, xmax, ymax], fabric };
+  const pbox = r.has_print === true ? toBox(r.print_box) : null;
+  return {
+    v: 2,
+    angle: Math.round(angle * 10) / 10,
+    box,
+    fabric,
+    print: pbox
+      ? {
+          box: pbox,
+          x: Math.round(clamp(r.print_x, -1, 1, 0) * 100) / 100,
+          y: Math.round(clamp(r.print_y, 0, 1, 0.35) * 100) / 100,
+          width: Math.round(clamp(r.print_width, 0.05, 0.95, 0.4) * 100) / 100,
+        }
+      : undefined,
+  };
 }

@@ -5,12 +5,13 @@
 import { AiUnavailable, analyzeFit } from "./ai";
 import { urlToDataUrl } from "./image";
 import { actions } from "./store";
-import type { Garment } from "./types";
+import { FIT_VERSION, type Garment, type GarmentFit } from "./types";
 
 const pending = new Set<string>();
 
 /** ¿Le falta el ajuste a alguna de sus fotos? */
-export const needsFit = (g: Garment) => Boolean((g.photo && !g.fit?.front) || (g.photoBack && !g.fit?.back));
+const stale = (f: GarmentFit | undefined) => !f || f.v !== FIT_VERSION;
+export const needsFit = (g: Garment) => Boolean((g.photo && stale(g.fit?.front)) || (g.photoBack && stale(g.fit?.back)));
 
 /**
  * Pide el ajuste de las fotos que no lo tienen y guarda la prenda. Devuelve true si cambió algo.
@@ -21,8 +22,8 @@ export async function ensureFit(g: Garment): Promise<boolean> {
   pending.add(g.id);
   try {
     const [front, back] = await Promise.all([
-      g.photo && !g.fit?.front ? urlToDataUrl(g.photo, 800).then(analyzeFit) : Promise.resolve(g.fit?.front),
-      g.photoBack && !g.fit?.back ? urlToDataUrl(g.photoBack, 800).then(analyzeFit) : Promise.resolve(g.fit?.back),
+      g.photo && stale(g.fit?.front) ? urlToDataUrl(g.photo, 1000).then(analyzeFit) : Promise.resolve(g.fit?.front),
+      g.photoBack && stale(g.fit?.back) ? urlToDataUrl(g.photoBack, 1000).then(analyzeFit) : Promise.resolve(g.fit?.back),
     ]);
     await actions.saveGarment({ ...g, fit: { front, back } });
     return true;
