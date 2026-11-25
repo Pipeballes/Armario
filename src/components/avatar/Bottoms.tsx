@@ -18,14 +18,12 @@ import {
   type Ring,
   type Skeleton,
 } from "@/lib/skeleton";
-import type { GarmentFit } from "@/lib/types";
 import { Geo } from "./Body";
-import { Mat, REPEAT, shade } from "./materials";
-import { Button, Cuff, DecalMat, Line, Piece, PrintDecal, RingBand, lerp3, shellNormal } from "./parts";
+import { Mat, REPEAT, shade, type Fill } from "./materials";
+import { Button, Cuff, DecalMat, Line, Piece, PrintDecal, RingBand, lerp3, shellNormal, type Decal } from "./parts";
 import { axisLathe, limbFrame, limbPatch, limbPoint, phiAtX, ringTube, shellPatch, shellPoint } from "./shapes";
 import { Skirt } from "./Tops";
 
-type Decal = { tex: THREE.Texture; aspect: number } | null;
 
 /** Hasta dónde baja la pierna del pantalón por la pantorrilla (0 = rodilla, 1 = tobillo; 0 si no llega). */
 export function pantCalfT(look: BottomLook): number {
@@ -62,7 +60,7 @@ function thighClothProfile(sk: Skeleton, look: BottomLook): [number, number][] {
 }
 
 /** Pierna del pantalón (la derecha). Sigue la forma de la pierna + holgura; los anchos se abren abajo. */
-function PantLeg({ sk, look }: { sk: Skeleton; look: BottomLook }) {
+function PantLeg({ sk, look, fill }: { sk: Skeleton; look: BottomLook; fill: Fill }) {
   const l = useMemo(() => sk.leg(1), [sk]);
   const prof = useMemo(() => limbProfiles(sk), [sk]);
   const inf = bottomInflate(look);
@@ -91,19 +89,19 @@ function PantLeg({ sk, look }: { sk: Skeleton; look: BottomLook }) {
     <group>
       <mesh position={j.hip.at} castShadow>
         <sphereGeometry args={[j.hip.r, 24, 18]} />
-        <Mat color={look.color} pattern={look.pattern} repeat={REPEAT.ball} />
+        <Mat color={look.color} pattern={fill} repeat={REPEAT.ball} />
       </mesh>
       <Geo geo={upper}>
-        <Mat color={look.color} pattern={look.pattern} repeat={REPEAT.leg} double />
+        <Mat color={look.color} pattern={fill} repeat={REPEAT.leg} double />
       </Geo>
       {lower && (
         <>
           <mesh position={j.knee.at} castShadow>
             <sphereGeometry args={[j.knee.r, 24, 18]} />
-            <Mat color={look.color} pattern={look.pattern} repeat={REPEAT.ball} />
+            <Mat color={look.color} pattern={fill} repeat={REPEAT.ball} />
           </mesh>
           <Geo geo={lower}>
-            <Mat color={look.color} pattern={look.pattern} repeat={REPEAT.leg} double />
+            <Mat color={look.color} pattern={fill} repeat={REPEAT.leg} double />
           </Geo>
         </>
       )}
@@ -354,7 +352,8 @@ function LegDetails({ sk, look }: { sk: Skeleton; look: BottomLook }) {
  * Logo o estampado de la parte de abajo, donde lo vio la IA: en el cuerpo (cerca de la cintura)
  * o sobre una pierna (como la pipa de un short deportivo).
  */
-function BottomPrint({ sk, look, shell, place, decal, back }: { sk: Skeleton; look: BottomLook; shell: Ring[]; place: NonNullable<GarmentFit["print"]>; decal: NonNullable<Decal>; back: boolean }) {
+function BottomPrint({ sk, look, shell, decal, back }: { sk: Skeleton; look: BottomLook; shell: Ring[]; decal: Decal; back: boolean }) {
+  const place = decal.place;
   const l1 = sk.leg(1);
   const tEnd = thighEndT(look);
   const hemY = look.kind === "shorts" ? l1.hip[1] - tEnd * (l1.hip[1] - l1.knee[1]) : look.kind === "bermuda" ? l1.knee[1] - 0.03 : 0.12;
@@ -401,30 +400,30 @@ export function BottomGarment({
   covered = false,
   decalFront,
   decalBack,
+  tile,
 }: {
   sk: Skeleton;
   look: BottomLook;
   shell: Ring[];
   covered?: boolean;
-  decalFront: Decal;
-  decalBack: Decal;
+  decalFront: Decal | null;
+  decalBack: Decal | null;
+  /** Pedazo de la tela real (estampado por toda la prenda), si hay. */
+  tile?: THREE.Texture | null;
 }) {
+  const fill: Fill = tile ? { kind: "foto", tex: tile } : look.pattern;
   const brief = look.kind === "brief";
   const geo = useMemo(() => ringTube(shell, { segments: 48, capBottom: true }), [shell]);
   const prints = (
     <>
-      {decalFront && look.print?.fitFront?.print && (
-        <BottomPrint sk={sk} look={look} shell={shell} place={look.print.fitFront.print} decal={decalFront} back={false} />
-      )}
-      {decalBack && look.print?.fitBack?.print && (
-        <BottomPrint sk={sk} look={look} shell={shell} place={look.print.fitBack.print} decal={decalBack} back />
-      )}
+      {decalFront && <BottomPrint sk={sk} look={look} shell={shell} decal={decalFront} back={false} />}
+      {decalBack && <BottomPrint sk={sk} look={look} shell={shell} decal={decalBack} back />}
     </>
   );
   if (look.kind === "skirt") {
     return (
       <group>
-        <Skirt sk={sk} from={1.02} length={look.length} color={look.color} pattern={look.pattern} />
+        <Skirt sk={sk} from={1.02} length={look.length} color={look.color} pattern={fill} />
         {!covered && <RingBand ring={ringAt(shellRings(sk.torso, 0.012, 0.9, 1.02), 1.02)} tube={0.008} color={look.trim} />}
       </group>
     );
@@ -432,7 +431,7 @@ export function BottomGarment({
   return (
     <group>
       <Geo geo={geo}>
-        <Mat color={look.color} pattern={look.pattern} repeat={REPEAT.body} double />
+        <Mat color={look.color} pattern={fill} repeat={REPEAT.body} double />
       </Geo>
       {/* Cintura (si la remera la tapa, no se dibuja: asomaría a través de la tela) */}
       {!covered && brief && <RingBand ring={shell[shell.length - 1]} tube={0.005} color={look.trim} />}
@@ -446,7 +445,7 @@ export function BottomGarment({
       {!brief &&
         ([1, -1] as const).map((side) => (
           <group key={side} scale={[side, 1, 1]}>
-            <PantLeg sk={sk} look={look} />
+            <PantLeg sk={sk} look={look} fill={fill} />
           </group>
         ))}
     </group>

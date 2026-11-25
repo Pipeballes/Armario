@@ -6,14 +6,13 @@
 
 import { useMemo } from "react";
 import * as THREE from "three";
-import type { FabricPattern, TopLook } from "@/lib/look";
+import type { TopLook } from "@/lib/look";
 import { ringAt, skirtRings, sleeveInflate, strapPath, topCoversShoulders, topHemTube, type Ring, type Skeleton, type SkirtLength } from "@/lib/skeleton";
 import { Geo } from "./Body";
-import { Mat, REPEAT, shade } from "./materials";
-import { ButtonRow, Line, Piece, PrintDecal, RingBand, Sleeve } from "./parts";
+import { Mat, REPEAT, shade, type Fill } from "./materials";
+import { ButtonRow, Line, Piece, PrintDecal, RingBand, Sleeve, type Decal } from "./parts";
 import { axisLathe, phiAtX, ringTube, shellPatch, shellPoint } from "./shapes";
 
-type Decal = { tex: THREE.Texture; aspect: number } | null;
 
 /** Cuello camisero: una banda alrededor del cuello, abierta adelante, con las dos puntas hacia abajo. */
 function Collar({ ring, color, trim, polo = false }: { ring: Ring; color: string; trim: string; polo?: boolean }) {
@@ -94,7 +93,7 @@ function Placket({
   color: string;
   trim: string;
   buttonColor: string;
-  pattern: FabricPattern | null;
+  pattern: Fill;
 }) {
   const w = 0.013;
   const geo = useMemo(() => shellPatch(shell, y1, y0, (y) => [phiAtX(shell, y, -w), phiAtX(shell, y, w)], 0.0012, 4, 12), [shell, y0, y1]);
@@ -110,7 +109,7 @@ function Placket({
   );
   return (
     <>
-      <Piece geo={geo} color={pattern ? color : shade(color, -0.03)} pattern={pattern} />
+      <Piece geo={geo} color={pattern ? color : shade(color, -0.03)} pattern={pattern} repeat={[0.18, Math.max(0.6, (y0 - y1) / 0.15)]} />
       {seams.map((pts, i) => (
         <Line key={i} points={pts} r={0.0008} color={trim} />
       ))}
@@ -121,7 +120,7 @@ function Placket({
 
 /** Bolsillo en el pecho (del lado izquierdo de quien la usa, +x), con el borde de arriba marcado. */
 const POCKET = { x0: 0.045, x1: 0.112, y0: 1.235, y1: 1.318 };
-function ChestPocket({ shell, color, trim, pattern }: { shell: Ring[]; color: string; trim: string; pattern: FabricPattern | null }) {
+function ChestPocket({ shell, color, trim, pattern }: { shell: Ring[]; color: string; trim: string; pattern: Fill }) {
   const geo = useMemo(() => {
     const { x0, x1, y0, y1 } = POCKET;
     return shellPatch(shell, y0, y1, (y) => [phiAtX(shell, y, x0), phiAtX(shell, y, x1)], 0.0014, 6, 6);
@@ -132,7 +131,7 @@ function ChestPocket({ shell, color, trim, pattern }: { shell: Ring[]; color: st
   }, [shell]);
   return (
     <>
-      <Piece geo={geo} color={pattern ? color : shade(color, -0.035)} pattern={pattern} />
+      <Piece geo={geo} color={pattern ? color : shade(color, -0.035)} pattern={pattern} repeat={[0.45, 0.55]} />
       <Line points={edge} r={0.0011} color={trim} />
     </>
   );
@@ -242,16 +241,20 @@ export function TopGarment({
   showSleeves,
   decalFront,
   decalBack,
+  tile,
 }: {
   sk: Skeleton;
   look: TopLook;
   shell: Ring[];
   skin: string;
   showSleeves: boolean;
-  decalFront: Decal;
-  decalBack: Decal;
+  decalFront: Decal | null;
+  decalBack: Decal | null;
+  /** Pedazo de la tela real (estampado por toda la prenda), si hay. */
+  tile?: THREE.Texture | null;
 }) {
   const color = look.color;
+  const fill: Fill = tile ? { kind: "foto", tex: tile } : look.pattern;
   const geo = useMemo(() => ringTube(shell, { segments: 48, capBottom: look.cut === "swimsuit" }), [shell, look.cut]);
   const topRing = shell[shell.length - 1];
   const hemY = shell[0].y;
@@ -263,14 +266,10 @@ export function TopGarment({
   return (
     <group>
       <Geo geo={geo}>
-        <Mat color={color} pattern={look.pattern} repeat={REPEAT.body} double />
+        <Mat color={color} pattern={fill} repeat={REPEAT.body} double />
       </Geo>
-      {decalFront && look.print?.fitFront?.print && (
-        <PrintDecal shell={shell} tex={decalFront.tex} aspect={decalFront.aspect} place={look.print.fitFront.print} />
-      )}
-      {decalBack && look.print?.fitBack?.print && (
-        <PrintDecal shell={shell} tex={decalBack.tex} aspect={decalBack.aspect} place={look.print.fitBack.print} back />
-      )}
+      {decalFront && <PrintDecal shell={shell} tex={decalFront.tex} aspect={decalFront.aspect} place={decalFront.place} />}
+      {decalBack && <PrintDecal shell={shell} tex={decalBack.tex} aspect={decalBack.aspect} place={decalBack.place} back />}
       {/* Ruedo (elastizado en buzos y sweaters). Metida adentro del pantalón, no se ve. */}
       {look.cut !== "swimsuit" && look.dress === "none" && !look.tucked && (
         <RingBand ring={shell[0]} tube={topHemTube(look)} color={look.trim} />
@@ -309,10 +308,10 @@ export function TopGarment({
           color={color}
           trim={look.trim}
           buttonColor={look.buttonColor}
-          pattern={look.pattern}
+          pattern={fill}
         />
       )}
-      {look.chestPocket && topRing.y > 1.34 && <ChestPocket shell={shell} color={color} trim={look.trim} pattern={look.pattern} />}
+      {look.chestPocket && topRing.y > 1.34 && <ChestPocket shell={shell} color={color} trim={look.trim} pattern={fill} />}
       {look.sideStripes && <SideStripes shell={shell} color={look.trim} />}
       {look.pocket && <KangarooPocket ring={ringAt(shell, 1.0)} color={shade(color, -0.03)} />}
       {/* Mangas */}
@@ -325,7 +324,7 @@ export function TopGarment({
                 length={look.sleeves === "long" ? "long" : "short"}
                 inflate={sleeveInflate(look)}
                 color={color}
-                pattern={look.pattern}
+                pattern={fill}
                 trim={look.trim}
                 cuff={look.ribbed ? "ribbed" : look.cuffs ? "shirt" : "plain"}
                 buttonColor={look.buttonColor}
@@ -350,7 +349,7 @@ export function Skirt({
   from: number;
   length: SkirtLength;
   color: string;
-  pattern: FabricPattern | null;
+  pattern: Fill;
 }) {
   const geo = useMemo(() => ringTube(skirtRings(sk.torso, from, length), { segments: 48 }), [sk.torso, from, length]);
   return (

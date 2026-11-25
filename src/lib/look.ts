@@ -13,12 +13,21 @@ export interface FabricPattern {
   color: string;
 }
 
-/** La prenda real: fotos y el ajuste de la IA, para dibujar el estampado como calcomanía. */
+/**
+ * La prenda real, para dibujar su estampado: las fotos, el ajuste de la IA y qué buscar en ellas.
+ * Si la IA marcó dónde está el estampado, se recorta de ahí; si no, se mira la foto.
+ */
 export interface PrintRef {
   front: string;
   back?: string;
   fitFront?: GarmentFit;
   fitBack?: GarmentFit;
+  /** La persona (o la IA al cargarla) dijo que es estampada. */
+  estampado: boolean;
+  /** La IA vio un dibujo que se repite por toda la tela: se usa un pedazo de la tela real. */
+  allover: boolean;
+  /** Qué parte del ancho de la foto es el cuerpo de la prenda (en una remera, sin las mangas). */
+  body: number;
 }
 
 export interface TopLook {
@@ -201,10 +210,12 @@ function patternOf(d: GarmentDetails, color: string): FabricPattern | null {
   return { kind: d.pattern, color: d.patternColor ?? contrast(color, 0.45) };
 }
 
-function printOf(g: Garment): PrintRef | undefined {
+function printOf(g: Garment, body: number): PrintRef | undefined {
   if (!g.photo) return undefined;
-  if (!g.fit?.front?.print && !g.fit?.back?.print) return undefined;
-  return { front: g.photo, back: g.photoBack, fitFront: g.fit?.front, fitBack: g.fit?.back };
+  const d = detailsOf(g);
+  const estampado = g.pattern === "estampado";
+  if (!estampado && !d.pattern && !g.fit?.front?.print && !g.fit?.back?.print) return undefined;
+  return { front: g.photo, back: g.photoBack, fitFront: g.fit?.front, fitBack: g.fit?.back, estampado, allover: Boolean(d.pattern), body };
 }
 
 // ───────────────────────── Parte de arriba ─────────────────────────
@@ -332,7 +343,7 @@ function topLook(g: Garment): TopLook {
     sideStripes: Boolean(d.sideStripes),
     dress,
     tucked: false,
-    print: g.category !== "dress" ? printOf(g) : undefined,
+    print: printOf(g, 0.62),
   };
 }
 
@@ -422,7 +433,7 @@ function bottomLook(g: Garment, gender?: string | null): BottomLook {
     pockets,
     sideStripes: Boolean(d.sideStripes),
     crease: k === "pantalon-vestir",
-    print: printOf(g),
+    print: printOf(g, 1),
   };
 }
 
@@ -525,7 +536,7 @@ function outerLook(g: Garment): OuterLook {
     kind,
     hood: Boolean(d.hood) || k === "parka" || k === "rompevientos" || /capucha/.test(name),
     closure,
-    print: printOf(g),
+    print: printOf(g, 0.6),
   };
 }
 

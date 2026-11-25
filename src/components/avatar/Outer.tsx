@@ -10,12 +10,11 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import type { OuterLook } from "@/lib/look";
 import { outerFit, ringAt, type Ring, type Skeleton } from "@/lib/skeleton";
 import { Geo } from "./Body";
-import { Mat, REPEAT, shade } from "./materials";
-import { Button, ButtonRow, Line, Piece, PrintDecal, RingBand, Sleeve, shellNormal } from "./parts";
+import { Mat, REPEAT, shade, type Fill } from "./materials";
+import { Button, ButtonRow, Line, Piece, PrintDecal, RingBand, Sleeve, shellNormal, type Decal } from "./parts";
 import { axisLathe, phiAtX, ringTube, shellPatch, shellPoint } from "./shapes";
 import { Hood } from "./Tops";
 
-type Decal = { tex: THREE.Texture; aspect: number } | null;
 
 /** Solapas (saco y campera de cuero): dos bandas que bajan del cuello en V. */
 function Lapels({ shell, color, wide }: { shell: Ring[]; color: string; wide: boolean }) {
@@ -137,13 +136,17 @@ export function OuterGarment({
   shell,
   decalFront,
   decalBack,
+  tile,
 }: {
   sk: Skeleton;
   look: OuterLook;
   shell: Ring[];
-  decalFront: Decal;
-  decalBack: Decal;
+  decalFront: Decal | null;
+  decalBack: Decal | null;
+  /** Pedazo de la tela real (estampado por toda la prenda), si hay. */
+  tile?: THREE.Texture | null;
 }) {
+  const fill: Fill = tile ? { kind: "foto", tex: tile } : look.pattern;
   const { sleeve } = outerFit(look.kind);
   const geo = useMemo(() => ringTube(shell, { segments: 56 }), [shell]);
   const topRing = shell[shell.length - 1];
@@ -157,14 +160,10 @@ export function OuterGarment({
   return (
     <group>
       <Geo geo={geo}>
-        <Mat color={look.color} pattern={look.pattern} repeat={REPEAT.body} double />
+        <Mat color={look.color} pattern={fill} repeat={REPEAT.body} double />
       </Geo>
-      {decalFront && look.print?.fitFront?.print && (
-        <PrintDecal shell={shell} tex={decalFront.tex} aspect={decalFront.aspect} place={look.print.fitFront.print} />
-      )}
-      {decalBack && look.print?.fitBack?.print && (
-        <PrintDecal shell={shell} tex={decalBack.tex} aspect={decalBack.aspect} place={look.print.fitBack.print} back />
-      )}
+      {decalFront && <PrintDecal shell={shell} tex={decalFront.tex} aspect={decalFront.aspect} place={decalFront.place} />}
+      {decalBack && <PrintDecal shell={shell} tex={decalBack.tex} aspect={decalBack.aspect} place={decalBack.place} back />}
       <RingBand ring={shell[0]} tube={look.kind === "denim" ? 0.009 : 0.006} color={look.kind === "denim" ? shade(look.color, -0.04) : dark} />
       {/* Cuello */}
       {(look.kind === "blazer" || look.kind === "leather") && <Lapels shell={shell} color={shade(look.color, 0.05)} wide={look.kind === "leather"} />}
@@ -232,7 +231,7 @@ export function OuterGarment({
               length="long"
               inflate={sleeve}
               color={look.color}
-              pattern={look.pattern}
+              pattern={fill}
               trim={look.kind === "denim" ? shade(look.color, -0.04) : dark}
               cuff={look.kind === "puffer" || look.kind === "fleece" ? "ribbed" : "plain"}
             />

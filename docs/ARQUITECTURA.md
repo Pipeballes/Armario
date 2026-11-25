@@ -42,6 +42,7 @@ El avatar se arma con geometría propia (sin modelos externos) para que cargue r
 - **`lib/avatar.ts`**: medidas del cuerpo según el perfil, color de piel, peinados, anteojos y qué prenda va en cada lugar del cuerpo (`slotOf`).
 - **`lib/look.ts`**: cómo se ve cada prenda (`lookFrom`). Cada tipo tiene sus detalles de siempre aunque la foto no los muestre (una camisa lleva cuello, tira de botones y puños; un short deportivo, cintura elástica y cordón; una ojota, la tira entre los dedos). Encima va lo que vio la IA: el color real de la tela, el dibujo, el estampado y otros detalles.
 - **`lib/fit.ts`** + **`lib/print-decal.ts`**: la prenda "digitalizada". La IA ubica la prenda y el estampado en la foto (aunque esté torcida); en el navegador se recorta el estampado, se endereza, se le saca la tela de alrededor y se pega como calcomanía sobre la prenda del color de la tela.
+  - Si la prenda es estampada pero la IA no marcó dónde (o no hay IA), se mira la foto (`analyzePhotoPrint`): se endereza la prenda, se separa la tela del dibujo (sin contar el borde ni el fondo conectado al borde de la foto) y se decide si es un estampado suelto (se recorta y se pega donde está) o un dibujo por toda la tela (aparece en casi toda la prenda: se usa un pedazo de la tela real, repetido en espejo). Nunca se inventan rayas.
 
 ## Agenda, clima y recordatorio
 

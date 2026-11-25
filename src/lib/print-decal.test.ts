@@ -83,3 +83,70 @@ describe("parseFit", () => {
     expect(hexToRgb("#ff8000")).toEqual([255, 128, 0]);
   });
 });
+
+describe("estampado mirando la foto (sin la IA)", () => {
+  // Prenda de 80x80 (blanca) sobre un fondo beige de 100x100, con lo que dibuje `paint`.
+  const make = (paint: (x: number, y: number) => [number, number, number] | null, shadow = false) => {
+    const w = 100;
+    const h = 100;
+    const d = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        const inside = x >= 10 && x < 90 && y >= 10 && y < 90;
+        // Sombra suave en la mitad de abajo de la prenda (la tela sigue siendo tela).
+        const base: [number, number, number] = inside ? (shadow && y > 50 ? [190, 190, 188] : [246, 246, 244]) : [205, 196, 182];
+        const c = inside ? (paint(x, y) ?? base) : base;
+        d.set([...c, 255], i);
+      }
+    return { d, w, h };
+  };
+  const scan = async (img: ReturnType<typeof make>) => {
+    const { scanPrint } = await import("./print-decal");
+    return scanPrint(img.d, img.w, img.h, [246, 246, 244], [205, 196, 182]);
+  };
+
+  it("lisa, aunque tenga sombra: no hay estampado", async () => {
+    const { classifyScan } = await import("./print-decal");
+    expect(classifyScan(await scan(make(() => null, true)))).toBe("none");
+  });
+
+  it("un dibujo en el pecho: estampado suelto, con su caja", async () => {
+    const { classifyScan } = await import("./print-decal");
+    const s = await scan(make((x, y) => (x >= 40 && x < 60 && y >= 25 && y < 45 ? [20, 20, 20] : null)));
+    expect(classifyScan(s)).toBe("single");
+    expect(s.box).toEqual([40, 25, 60, 45]);
+    expect(s.garmentBox).toEqual([10, 10, 90, 90]);
+  });
+
+  it("el borde de la prenda mezclado con el fondo no cuenta como dibujo", async () => {
+    const { classifyScan } = await import("./print-decal");
+    // Borde gris de 2 píxeles alrededor (como queda en una foto) y un logo chico.
+    const img = make((x, y) => {
+      if (x < 12 || x >= 88 || y < 12 || y >= 88) return [120, 110, 100];
+      return x >= 30 && x < 40 && y >= 25 && y < 32 ? [20, 20, 160] : null;
+    });
+    const s = await scan(img);
+    expect(classifyScan(s)).toBe("single");
+    expect(s.box).toEqual([30, 25, 40, 32]);
+  });
+
+  it("un logo con el borde del mismo color que el fondo sigue siendo logo (el fondo es solo lo de afuera)", async () => {
+    const { classifyScan } = await import("./print-decal");
+    const s = await scan(
+      make((x, y) => {
+        if (x < 30 || x >= 44 || y < 60 || y >= 70) return null;
+        const edge = x === 30 || x === 43 || y === 60 || y === 69;
+        return edge ? [205, 196, 182] : [250, 250, 250];
+      }),
+    );
+    // Tela oscura para que el logo blanco contraste: se vuelve a escanear con esa tela.
+    expect(classifyScan(s)).not.toBe("allover");
+  });
+
+  it("rayas por toda la tela: dibujo por toda la prenda", async () => {
+    const { classifyScan } = await import("./print-decal");
+    const s = await scan(make((_x, y) => (y % 8 < 3 ? [200, 30, 40] : null)));
+    expect(classifyScan(s)).toBe("allover");
+  });
+});

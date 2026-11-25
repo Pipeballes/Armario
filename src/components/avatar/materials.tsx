@@ -119,12 +119,31 @@ function drawPattern(ctx: CanvasRenderingContext2D, size: number, color: string,
   }
 }
 
+/** Pedazo de la tela real de la foto (estampado por toda la prenda). */
+export interface PhotoFill {
+  kind: "foto";
+  tex: THREE.Texture;
+}
+
+/** Lo que va sobre la tela: un dibujo hecho acá, un pedazo de la tela de la foto, o nada (lisa). */
+export type Fill = FabricPattern | PhotoFill | null | undefined;
+
 const patternCache = new Map<string, HTMLCanvasElement>();
 
 /** Textura con el dibujo de la tela (o null si es lisa). */
-function usePatternTexture(color: string, pattern: FabricPattern | null | undefined, repeat: readonly [number, number]) {
-  const key = pattern ? `${color}|${pattern.kind}|${pattern.color}` : "";
+function usePatternTexture(color: string, fill: Fill, repeat: readonly [number, number]) {
+  const photo = fill?.kind === "foto" ? fill.tex : null;
+  const pattern = fill && fill.kind !== "foto" ? fill : null;
+  const key = pattern ? `${color}|${pattern.kind}|${pattern.color}` : photo ? `foto|${photo.uuid}` : "";
   const tex = useMemo(() => {
+    if (photo) {
+      // La tela real repetida en espejo, así no se notan las uniones entre pedazos.
+      const t = photo.clone();
+      t.wrapS = t.wrapT = THREE.MirroredRepeatWrapping;
+      t.repeat.set(repeat[0] * 0.8, repeat[1] * 0.8);
+      t.needsUpdate = true;
+      return t;
+    }
     if (!pattern || typeof document === "undefined") return null;
     let canvas = patternCache.get(key);
     if (!canvas) {
@@ -139,7 +158,7 @@ function usePatternTexture(color: string, pattern: FabricPattern | null | undefi
     t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = 4;
     return t;
-    // pattern va dentro de key.
+    // pattern y photo van dentro de key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, repeat[0], repeat[1]]);
   useEffect(() => () => tex?.dispose(), [tex]);
@@ -155,7 +174,7 @@ export function Mat({
   detail = false,
 }: {
   color: string;
-  pattern?: FabricPattern | null;
+  pattern?: Fill;
   repeat?: readonly [number, number];
   double?: boolean;
   /** Pegado sobre otra superficie (bolsillo, tira, franja): se dibuja delante, sin parpadeo. */
@@ -164,6 +183,9 @@ export function Mat({
   const map = usePatternTexture(color, pattern, repeat);
   return (
     <meshToonMaterial
+      // Si la textura llega después (la tela de la foto se arma en segundo plano), el material se
+      // rehace: three.js no agrega la textura a un material ya armado sin ella.
+      key={map ? `m${map.uuid}` : "liso"}
       color={map ? "#ffffff" : color}
       map={map ?? undefined}
       gradientMap={getToonGradient()}

@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { cameraFor, type BodyDims, type View } from "@/lib/avatar";
+import { analyzePhotoPrint } from "@/lib/print-decal";
 import { wornBottom, wornTop, type Look } from "@/lib/look";
 import {
   armRoom,
@@ -35,7 +36,7 @@ import BodySkin from "./avatar/Body";
 import { BottomGarment, pantCalfT, pantsOverBoots } from "./avatar/Bottoms";
 import Head from "./avatar/Head";
 import { OuterGarment } from "./avatar/Outer";
-import { usePrintDecal } from "./avatar/parts";
+import { useGarmentPrint } from "./avatar/parts";
 import { BootShaft, HEEL_LIFT, HEEL_PITCH, Shoe, soleLift } from "./avatar/Shoes";
 import { Skirt, TopGarment } from "./avatar/Tops";
 
@@ -63,12 +64,14 @@ function Avatar({ dims, skin, look, style }: { dims: BodyDims; skin: string; loo
   const outer = look.outerwear;
   const acc = look.accessory;
   // Prenda digital: el estampado de cada prenda como calcomanía (el color de la tela ya viene en el look).
-  const topFront = usePrintDecal(look.top?.print?.front, look.top?.print?.fitFront);
-  const topBack = usePrintDecal(look.top?.print?.back, look.top?.print?.fitBack);
-  const bottomFront = usePrintDecal(look.bottom?.print?.front, look.bottom?.print?.fitFront);
-  const bottomBack = usePrintDecal(look.bottom?.print?.back, look.bottom?.print?.fitBack);
-  const outerFront = usePrintDecal(outer?.print?.front, outer?.print?.fitFront);
-  const outerBack = usePrintDecal(outer?.print?.back, outer?.print?.fitBack);
+  // Si la IA no marcó el estampado, se mira la foto (suelto: calcomanía; por toda la tela: la tela real).
+  const topFront = useGarmentPrint(look.top?.print, false);
+  const topBack = useGarmentPrint(look.top?.print, true);
+  const bottomFront = useGarmentPrint(look.bottom?.print, false);
+  const bottomBack = useGarmentPrint(look.bottom?.print, true);
+  const outerFront = useGarmentPrint(outer?.print, false);
+  const outerBack = useGarmentPrint(outer?.print, true);
+  const topTile = topFront?.tile ?? topBack?.tile ?? null;
   const shoes = look.shoes;
   const heel = shoes?.kind === "heel";
   const hatOn = acc?.kind === "cap" || acc?.kind === "beanie" || acc?.kind === "hat";
@@ -127,8 +130,9 @@ function Avatar({ dims, skin, look, style }: { dims: BodyDims; skin: string; loo
             look={bottom}
             shell={layers.below}
             covered={Boolean(outer) || (!top.tucked && ((top.cut === "normal" && top.dress === "none") || top.cut === "swimsuit"))}
-            decalFront={bottomFront}
-            decalBack={bottomBack}
+            decalFront={bottomFront?.decal ?? null}
+            decalBack={bottomBack?.decal ?? null}
+            tile={bottomFront?.tile ?? bottomBack?.tile ?? null}
           />
         )}
         <TopGarment
@@ -137,12 +141,22 @@ function Avatar({ dims, skin, look, style }: { dims: BodyDims; skin: string; loo
           shell={layers.topRings}
           skin={skin}
           showSleeves={!outer || outer.kind === "vest"}
-          decalFront={outer && outer.kind !== "vest" ? null : topFront}
-          decalBack={outer && outer.kind !== "vest" ? null : topBack}
+          decalFront={outer && outer.kind !== "vest" ? null : (topFront?.decal ?? null)}
+          decalBack={outer && outer.kind !== "vest" ? null : (topBack?.decal ?? null)}
+          tile={topTile}
         />
-        {top.dress !== "none" && <Skirt sk={sk} from={0.98} length={top.dress} color={top.color} pattern={top.pattern} />}
+        {top.dress !== "none" && (
+          <Skirt sk={sk} from={0.98} length={top.dress} color={top.color} pattern={topTile ? { kind: "foto", tex: topTile } : top.pattern} />
+        )}
         {outer && layers.outerRings && (
-          <OuterGarment sk={sk} look={outer} shell={layers.outerRings} decalFront={outerFront} decalBack={outerBack} />
+          <OuterGarment
+            sk={sk}
+            look={outer}
+            shell={layers.outerRings}
+            decalFront={outerFront?.decal ?? null}
+            decalBack={outerBack?.decal ?? null}
+            tile={outerFront?.tile ?? outerBack?.tile ?? null}
+          />
         )}
         {acc && <Accessory look={acc} ctx={accCtx} />}
         {shoes &&
@@ -173,8 +187,13 @@ function CameraRig({ view, scale, controls }: { view: View; scale: number; contr
   // Solo en desarrollo: las pruebas automáticas mueven la cámara a cualquier zona (manos, pies…).
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
-    const w = window as unknown as { __armarioCam?: (p: V3, t: V3, fov?: number) => void; __armarioScene?: THREE.Scene };
+    const w = window as unknown as {
+      __armarioCam?: (p: V3, t: V3, fov?: number) => void;
+      __armarioScene?: THREE.Scene;
+      __armarioPrint?: typeof analyzePhotoPrint;
+    };
     w.__armarioScene = scene;
+    w.__armarioPrint = analyzePhotoPrint;
     // fov chico = zoom (para mirar de cerca sin chocar con la distancia mínima de la cámara).
     w.__armarioCam = (p, t, fov) => {
       moving.current = false;
@@ -189,6 +208,7 @@ function CameraRig({ view, scale, controls }: { view: View; scale: number; contr
     return () => {
       delete w.__armarioCam;
       delete w.__armarioScene;
+      delete w.__armarioPrint;
     };
   }, [camera, controls, scene]);
 

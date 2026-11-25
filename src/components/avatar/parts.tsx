@@ -5,12 +5,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
-import type { FabricPattern } from "@/lib/look";
-import { buildPrintDecal } from "@/lib/print-decal";
+import type { PrintRef } from "@/lib/look";
+import { analyzePhotoPrint, buildPrintDecal } from "@/lib/print-decal";
 import { clothProfile, jointBalls, limbProfiles, profileAt, ringAt, type Ring, type Skeleton, type V3 } from "@/lib/skeleton";
 import type { GarmentFit } from "@/lib/types";
 import { Geo } from "./Body";
-import { Mat, REPEAT, getToonGradient } from "./materials";
+import { Mat, REPEAT, getToonGradient, type Fill } from "./materials";
 import { axisLathe, limbFrame, limbPoint, pathTube, shellPoint } from "./shapes";
 
 export const lerp3 = (a: V3, b: V3, t: number): V3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
@@ -41,10 +41,21 @@ export function Cuff({ from, to, r, tube, color }: { from: V3; to: V3; r: number
 }
 
 /** Un parche pegado a la tela (bolsillo, tira, franja), con el dibujo de la tela si tiene. */
-export function Piece({ geo, color, pattern }: { geo: THREE.BufferGeometry; color: string; pattern?: FabricPattern | null }) {
+export function Piece({
+  geo,
+  color,
+  pattern,
+  repeat = [3, 3],
+}: {
+  geo: THREE.BufferGeometry;
+  color: string;
+  pattern?: Fill;
+  /** Repeticiones del dibujo a lo ancho y a lo alto (que coincidan con el tamaño del dibujo en la prenda). */
+  repeat?: readonly [number, number];
+}) {
   return (
     <Geo geo={geo} cast={false}>
-      <Mat color={color} pattern={pattern} repeat={[3, 3]} detail />
+      <Mat color={color} pattern={pattern} repeat={repeat} detail />
     </Geo>
   );
 }
@@ -108,7 +119,7 @@ export function Sleeve({
   length: "short" | "long";
   inflate: number;
   color: string;
-  pattern?: FabricPattern | null;
+  pattern?: Fill;
   trim: string;
   cuff?: CuffStyle;
   buttonColor?: string;
@@ -198,33 +209,65 @@ export function Sleeve({
 
 // ───────────────────────── Estampado ─────────────────────────
 
-/** Calcomanía del estampado (recortado de la foto, derecho y sin la tela de alrededor). */
-export function usePrintDecal(src: string | undefined, fit: GarmentFit | undefined): { tex: THREE.Texture; aspect: number } | null {
-  const [state, setState] = useState<{ key: string; tex: THREE.Texture; aspect: number } | null>(null);
-  const key = src && fit?.print ? `${src}|${JSON.stringify(fit)}` : "";
+/** Estampado suelto listo para pegar: la imagen, su proporción y dónde va sobre la prenda. */
+export interface Decal {
+  tex: THREE.Texture;
+  aspect: number;
+  place: NonNullable<GarmentFit["print"]>;
+}
+
+/** El estampado de un lado de la prenda: suelto (calcomanía) o por toda la tela (pedazo de tela real). */
+export type GarmentPrint = { decal: Decal; tile?: undefined } | { tile: THREE.Texture; decal?: undefined } | null;
+
+const canvasTexture = (c: HTMLCanvasElement) => {
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+};
+
+/**
+ * Estampado de un lado (adelante o atrás) de la prenda. Si la IA marcó dónde está, se recorta de
+ * ahí; si no, se mira la foto: un dibujo suelto se recorta y se pega donde está, y un dibujo por
+ * toda la tela se dibuja con un pedazo de la tela real. Nunca se inventan rayas.
+ */
+export function useGarmentPrint(ref: PrintRef | undefined, back: boolean): GarmentPrint {
+  const src = back ? ref?.back : ref?.front;
+  const fit = back ? ref?.fitBack : ref?.fitFront;
+  const [state, setState] = useState<{ key: string; print: NonNullable<GarmentPrint> } | null>(null);
+  const key = ref && src ? `${src}|${JSON.stringify(fit ?? null)}|${ref.estampado}|${ref.allover}|${ref.body}` : "";
   useEffect(() => {
-    if (!key || !src || !fit) return;
+    if (!key || !ref || !src) return;
     let alive = true;
     let made: THREE.Texture | null = null;
-    buildPrintDecal(src, fit)
-      .then((r) => {
-        if (!r) return;
-        const t = new THREE.CanvasTexture(r.canvas);
-        t.colorSpace = THREE.SRGBColorSpace;
-        t.anisotropy = 4;
-        made = t;
-        if (alive) setState({ key, tex: t, aspect: r.aspect });
-        else t.dispose();
-      })
-      .catch(() => {});
+    const done = (print: NonNullable<GarmentPrint>, tex: THREE.Texture) => {
+      made = tex;
+      if (alive) setState({ key, print });
+      else tex.dispose();
+    };
+    (async () => {
+      if (fit?.print && !ref.allover) {
+        const r = await buildPrintDecal(src, fit);
+        if (r) {
+          const tex = canvasTexture(r.canvas);
+          return done({ decal: { tex, aspect: r.aspect, place: fit.print } }, tex);
+        }
+      }
+      if (!ref.estampado && !ref.allover) return;
+      const r = await analyzePhotoPrint(src, fit, { body: ref.body, allover: ref.allover });
+      if (!r) return;
+      const tex = canvasTexture(r.kind === "single" ? r.canvas : r.tile);
+      if (r.kind === "single") done({ decal: { tex, aspect: r.aspect, place: { box: [0, 0, 1, 1], ...r.place } } }, tex);
+      else done({ tile: tex }, tex);
+    })().catch(() => {});
     return () => {
       alive = false;
       made?.dispose();
     };
-    // src y fit van dentro de key.
+    // ref, src y fit van dentro de key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
-  return state && state.key === key ? state : null;
+  return state && state.key === key ? state.print : null;
 }
 
 /**
