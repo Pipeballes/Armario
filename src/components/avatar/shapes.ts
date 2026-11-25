@@ -240,6 +240,69 @@ export function limbPatch(
   return gridGeometry(pos, uv, nx, ny);
 }
 
+/**
+ * Tramo final de una pieza torneada (toda la vuelta) cuyo borde de abajo cambia con el ángulo:
+ * el ruedo de un short con tajo al costado. `t1(theta)` dice dónde termina en cada ángulo.
+ */
+export function limbHemPatch(
+  frame: ReturnType<typeof limbFrame>,
+  t0: number,
+  t1: (theta: number) => number,
+  radius: (t: number) => number,
+  nx = 48,
+  ny = 4,
+): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const uv: number[] = [];
+  for (let j = 0; j <= ny; j++) {
+    for (let i = 0; i <= nx; i++) {
+      const theta = -Math.PI + (2 * Math.PI * i) / nx;
+      const end = t1(theta);
+      const t = end + ((t0 - end) * j) / ny;
+      const p = limbPoint(frame, t, theta, radius(t));
+      pos.push(p.x, p.y, p.z);
+      uv.push(i / nx, j / ny);
+    }
+  }
+  return gridGeometry(pos, uv, nx, ny);
+}
+
+/** Número entre 0 y 1 que parece al azar pero siempre es el mismo para cada i (así no "bailan"). */
+function noise(i: number): number {
+  const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/** Flecos de un ruedo deshilachado: hilitos de distinto largo que cuelgan del borde. */
+export function fringeGeometry(frame: ReturnType<typeof limbFrame>, t: number, r: number, n = 120): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const idx: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const theta = (2 * Math.PI * (i + 0.4 * noise(i))) / n;
+    const len = 0.004 + 0.011 * noise(i + 31) ** 1.5;
+    const w = 0.0016 + 0.0012 * noise(i + 57);
+    const base = limbPoint(frame, t, theta, r);
+    const tangent = frame.fwd.clone().multiplyScalar(-Math.sin(theta)).addScaledVector(frame.side, Math.cos(theta));
+    const out = frame.fwd.clone().multiplyScalar(Math.cos(theta)).addScaledVector(frame.side, Math.sin(theta));
+    const tip = base.clone().addScaledVector(frame.d, len).addScaledVector(out, len * 0.12);
+    const k = pos.length / 3;
+    for (const [p, half] of [
+      [base, w / 2],
+      [tip, w * 0.2],
+    ] as const) {
+      const a = p.clone().addScaledVector(tangent, -half);
+      const b = p.clone().addScaledVector(tangent, half);
+      pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+    }
+    idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
 function gridGeometry(pos: number[], uv: number[], nx: number, ny: number): THREE.BufferGeometry {
   const idx: number[] = [];
   for (let j = 0; j < ny; j++)

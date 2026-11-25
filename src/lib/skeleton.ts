@@ -173,11 +173,16 @@ function armJoints(torso: Ring[], hipW: number, sx: number, sk: Pick<Skeleton, "
 }
 
 /** Holgura y vuelo (abajo) de la parte de arriba según su corte. */
-export function topFit(look: Pick<TopLook, "cut" | "ribbed" | "dress">): { inflate: number; flare: number } {
+export function topFit(look: Pick<TopLook, "cut" | "ribbed" | "dress"> & { ease?: number }): { inflate: number; flare: number } {
   if (look.cut === "crop") return { inflate: 0.008, flare: 0 };
   if (look.cut === "bra" || look.cut === "swimsuit") return { inflate: 0.004, flare: 0 };
   if (look.dress !== "none") return { inflate: 0.008, flare: 0 };
-  return { inflate: look.ribbed ? 0.018 : 0.013, flare: look.ribbed ? 0 : 0.012 };
+  // Un talle más grande que el tuyo queda más holgado (y uno más chico, más pegado).
+  const ease = look.ease ?? 0;
+  return {
+    inflate: Math.max(0.005, (look.ribbed ? 0.018 : 0.013) + 0.006 * ease),
+    flare: look.ribbed ? 0 : Math.max(0, 0.012 + 0.004 * ease),
+  };
 }
 
 /** Holgura de las mangas de la parte de arriba. */
@@ -197,8 +202,68 @@ export function outerFit(kind: OuterLook["kind"]): { hem: number; inflate: numbe
 }
 
 /** Holgura de la parte de abajo (las calzas y la ropa interior van pegadas). */
-export function bottomInflate(look: Pick<BottomLook, "kind" | "tight">): number {
-  return look.kind === "brief" || look.tight ? 0.004 : 0.012;
+export function bottomInflate(look: Pick<BottomLook, "kind" | "tight"> & { ease?: number }): number {
+  const ease = look.ease ?? 0;
+  if (look.kind === "brief" || look.tight) return Math.max(0.003, 0.004 + 0.001 * ease);
+  // Un talle más grande queda más suelto en la cintura y la cadera; uno más chico, más justo.
+  return Math.max(0.004, 0.012 + 0.004 * ease);
+}
+
+/** Hasta dónde baja la pierna por el muslo (0 = cadera, 1 = rodilla): un talle más grande, más larga. */
+export function bottomLegT(look: Pick<BottomLook, "kind" | "legT"> & { ease?: number }): number {
+  if (look.kind !== "shorts") return 1;
+  return Math.min(1, Math.max(0.15, look.legT + 0.03 * (look.ease ?? 0)));
+}
+
+/**
+ * Cuánto más ancha que la pierna (más la holgura) queda la tela del muslo en cada punto (t: 0 en
+ * la cadera, 1 en la rodilla). Un short se abre hacia la boca de la pierna según lo ancho que es:
+ * el de correr, suelto; el de jean, más recto; la calza, pegada. Si se midió la boca en la foto,
+ * se usa esa medida.
+ */
+export function bottomLegExtra(sk: Skeleton, look: BottomLook): (t: number) => number {
+  if (look.kind !== "shorts" && look.kind !== "bermuda") return () => 0;
+  const tEnd = bottomLegT(look);
+  const ease = look.ease ?? 0;
+  let w = look.tight ? 0.001 : Math.max(0.002, (look.legWidth ?? 0.013) + 0.006 * ease);
+  if (look.kind === "bermuda") w *= 0.7;
+  else if (look.hemR && !look.tight) {
+    const skinEnd = profileAt(limbProfiles(sk).thigh, tEnd) + bottomInflate(look);
+    w = Math.min(0.07, Math.max(0.003, look.hemR - skinEnd + 0.006 * ease));
+  }
+  return (t) => (t <= 0 ? 0 : w * Math.min(1, t / tEnd) ** 1.3);
+}
+
+/**
+ * Un short ancho no se abre parejo para los dos lados: la tela se va hacia afuera (entre las
+ * piernas no hay lugar). Por eso el eje de la pierna del short se corre un poco hacia afuera a
+ * medida que baja. Devuelve cuánto se corre en cada punto (t: 0 en la cadera, 1 en la rodilla).
+ */
+export function bottomLegShift(sk: Skeleton, look: BottomLook): (t: number) => number {
+  if (look.kind !== "shorts" || look.tight) return () => 0;
+  const tEnd = bottomLegT(look);
+  const s = (0.85 * bottomLegExtra(sk, look)(tEnd)) / tEnd;
+  return (t) => s * Math.max(0, t);
+}
+
+/** Cadera y rodilla del eje de la pierna del short (del lado `side`), ya corrido hacia afuera si es ancho. */
+export function bottomLegAxis(sk: Skeleton, look: BottomLook, side: 1 | -1): { hip: V3; knee: V3 } {
+  const l = sk.leg(side);
+  const s = bottomLegShift(sk, look)(1);
+  return { hip: l.hip, knee: [l.knee[0] + side * s, l.knee[1], l.knee[2]] };
+}
+
+/** Perfil de la tela del muslo de una parte de abajo (t de 0 a 1 sobre el tramo que cubre). */
+export function bottomThighProfile(sk: Skeleton, look: BottomLook): [number, number][] {
+  const prof = limbProfiles(sk);
+  const tEnd = bottomLegT(look);
+  const inf = bottomInflate(look);
+  const extra = bottomLegExtra(sk, look);
+  const ts = new Set<number>([0, 1, ...prof.thigh.map((p) => p[0] / tEnd).filter((k) => k > 0 && k < 1)]);
+  for (let i = 1; i < 6; i++) ts.add(i / 6);
+  return [...ts]
+    .sort((a, b) => a - b)
+    .map((k) => [k, profileAt(prof.thigh, k * tEnd) + inf + extra(k * tEnd)]);
 }
 
 export type SkirtLength = "mini" | "short" | "midi" | "long";
@@ -235,7 +300,8 @@ export function topShape(sk: Skeleton, look: TopLook): { hem: number; top: numbe
       if (look.dress !== "none") return { hem: 0.97, top, ...fit };
       // Metida adentro del pantalón (con cinturón): termina apenas debajo de la cintura, sin vuelo.
       if (look.tucked) return { hem: 0.985, top, inflate: fit.inflate, flare: 0 };
-      return { hem: 0.87, top, ...fit };
+      // Un talle más grande cuelga más largo (y uno más chico queda más corto).
+      return { hem: Math.min(0.93, Math.max(0.79, 0.87 - 0.025 * (look.ease ?? 0))), top, ...fit };
     }
   }
 }
@@ -290,7 +356,7 @@ export function layerOver(rings: Ring[], under: Ring[][], gap = 0.005): Ring[] {
  * alturas, con cierta holgura de tela. Sirve para que una remera o un abrigo que cuelgan sobre los
  * muslos los tapen: el muslo sale un poco hacia adelante del torso.
  */
-export function legsEnvelope(sk: Skeleton, inflate: number, from: number, to: number): Ring[] {
+export function legsEnvelope(sk: Skeleton, inflate: number, from: number, to: number, extra: (t: number) => number = () => 0): Ring[] {
   const l = sk.leg(1);
   const prof = limbProfiles(sk);
   const balls = jointBalls(sk, inflate);
@@ -306,7 +372,7 @@ export function legsEnvelope(sk: Skeleton, inflate: number, from: number, to: nu
       const t = (l.hip[1] - y) / (l.hip[1] - l.knee[1]);
       cx = lerp(l.hip[0], l.knee[0], t);
       cz = lerp(l.hip[2], l.knee[2], t);
-      r = Math.max(r, profileAt(prof.thigh, t) + inflate);
+      r = Math.max(r, profileAt(prof.thigh, t) + inflate + extra(t));
     } else if (y < l.knee[1]) {
       const t = Math.min(1, (l.knee[1] - y) / (l.knee[1] - l.ankle[1]));
       cx = lerp(l.knee[0], l.ankle[0], t);

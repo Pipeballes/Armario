@@ -212,3 +212,39 @@ describe("prenda digital: cómo se ve cada tipo", () => {
     expect(lightness(contrast("#000000"))).toBeGreaterThan(0.2);
   });
 });
+
+describe("shorts: talle, ancho, terminación y bolsillos", () => {
+  const fit = (details: GarmentFit["details"]): Garment["fit"] => ({ front: { v: 4, angle: 0, box: [0, 0, 1, 1], fabric: "#202020", details } });
+  const ropa = [
+    g({ id: "run", category: "bottom", kind: "short", color: "negro", name: "Short de correr", sport: "running", size: "L" }),
+    g({ id: "jean", category: "bottom", kind: "short", color: "denim", name: "Short de jean", size: "M", fit: fit({ pockets: "jean", hem: "doblado" }) }),
+    g({ id: "bask", category: "bottom", kind: "short", color: "rojo", name: "Short de básquet", fit: fit({ width: "muy-holgado", hem: "tajo" }) }),
+    g({ id: "remera", category: "top", kind: "remera", color: "blanco", size: "XS" }),
+  ];
+
+  it("cada short sale distinto: ancho, bolsillos y terminación", () => {
+    const run = lookFrom({ bottom: "run" }, ropa).bottom!;
+    const jean = lookFrom({ bottom: "jean" }, ropa).bottom!;
+    const bask = lookFrom({ bottom: "bask" }, ropa).bottom!;
+    // El deportivo tiene bolsillos en la costura del costado y es más suelto que el de jean.
+    expect(run.pockets).toBe("side");
+    expect(run.legWidth).toBeGreaterThan(jean.legWidth);
+    expect(jean).toMatchObject({ pockets: "jean", hem: "doblado" });
+    expect(bask).toMatchObject({ hem: "tajo" });
+    expect(bask.legWidth).toBeGreaterThan(run.legWidth);
+  });
+
+  it("compara el talle de la prenda con el tuyo", () => {
+    const sizes = { top: "M", bottom: "M" };
+    expect(lookFrom({ bottom: "run" }, ropa, null, { sizes }).bottom!.ease).toBe(1);
+    expect(lookFrom({ bottom: "jean" }, ropa, null, { sizes }).bottom!.ease).toBe(0);
+    expect(lookFrom({ top: "remera" }, ropa, null, { sizes }).top!.ease).toBe(-2);
+    // Sin tu talle no se cambia nada.
+    expect(lookFrom({ bottom: "run" }, ropa).bottom!.ease).toBe(0);
+  });
+
+  it("guarda la foto de adelante para medir el largo y el ancho", () => {
+    const withPhoto = [g({ id: "p", category: "bottom", kind: "short", color: "negro", photo: "data:x", fit: fit({}) })];
+    expect(lookFrom({ bottom: "p" }, withPhoto).bottom!.source).toMatchObject({ src: "data:x" });
+  });
+});

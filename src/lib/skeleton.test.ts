@@ -301,3 +301,29 @@ describe("detalles debajo del abrigo", () => {
     }
   });
 });
+
+describe("piernas del short", () => {
+  it("un short ancho se abre hacia la boca y hacia afuera; uno más grande que tu talle, más largo y suelto", async () => {
+    const { bottomInflate, bottomLegExtra, bottomLegShift, bottomLegT, bottomThighProfile } = await import("./skeleton");
+    const sk = buildSkeleton(dims({ gender: "hombre" }));
+    const short: BottomLook = { ...DEFAULT_BOTTOM, kind: "shorts", legT: 0.5 };
+    const wide: BottomLook = { ...short, legWidth: 0.045 };
+    const big: BottomLook = { ...short, ease: 2 };
+    // Más ancho en la boca que arriba, y más que uno recto.
+    expect(bottomLegExtra(sk, wide)(0.5)).toBeGreaterThan(bottomLegExtra(sk, short)(0.5));
+    expect(bottomLegExtra(sk, wide)(0.05)).toBeLessThan(bottomLegExtra(sk, wide)(0.5));
+    const prof = bottomThighProfile(sk, wide);
+    expect(prof[prof.length - 1][1]).toBeGreaterThan(prof[Math.floor(prof.length / 2)][1] - 0.02);
+    // Se corre hacia afuera (entre las piernas no hay lugar), pero nunca deja ver la pierna de adentro.
+    expect(bottomLegShift(sk, wide)(0.5)).toBeGreaterThan(0);
+    for (const t of [0.05, 0.15, 0.3, 0.5]) {
+      expect(bottomInflate(wide) + bottomLegExtra(sk, wide)(t) - bottomLegShift(sk, wide)(t)).toBeGreaterThan(0.002);
+    }
+    // Talle más grande: más largo y más holgado.
+    expect(bottomLegT(big)).toBeGreaterThan(bottomLegT(short));
+    expect(bottomInflate(big)).toBeGreaterThan(bottomInflate(short));
+    // Si se midió la boca de la pierna en la foto, manda esa medida.
+    const measured: BottomLook = { ...short, hemR: 0.12 };
+    expect(bottomLegExtra(sk, measured)(0.5)).toBeGreaterThan(bottomLegExtra(sk, short)(0.5));
+  });
+});

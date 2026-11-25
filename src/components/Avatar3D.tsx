@@ -6,15 +6,18 @@
 
 import { ContactShadows, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { cameraFor, type BodyDims, type View } from "@/lib/avatar";
 import { analyzePhotoPrint } from "@/lib/print-decal";
-import { wornBottom, wornTop, type Look } from "@/lib/look";
+import { measureBottom } from "@/lib/photo-shape";
+import { wornBottom, wornTop, type BottomLook, type Look } from "@/lib/look";
 import {
   armRoom,
   bottomInflate,
+  bottomLegExtra,
+  bottomLegShift,
   bottomShell,
   buildSkeleton,
   layerOver,
@@ -48,6 +51,35 @@ function bandAround(rings: Ring[], y0: number, y1: number, grow: number): Ring[]
   });
 }
 
+/**
+ * El short o la bermuda con su largo y su ancho de verdad, medidos en la foto (mientras se mide, o
+ * si no se puede, queda como lo describió la IA). Si la foto muestra que es más largo o más corto
+ * de lo que parecía, cambia entre short y bermuda.
+ */
+function useMeasuredBottom(bottom: BottomLook | null): BottomLook | null {
+  const src = bottom?.source?.src;
+  const fit = bottom?.source?.fit;
+  // Solo los que tienen pierna suelta (en los pegados, como la calza o el bóxer, manda el cuerpo).
+  const measurable = Boolean(bottom && src && (bottom.kind === "shorts" || bottom.kind === "bermuda") && !bottom.tight && bottom.legWidth > 0.004);
+  const [shape, setShape] = useState<{ src: string; legT: number; hemR: number } | null>(null);
+  useEffect(() => {
+    if (!measurable || !src) return;
+    let alive = true;
+    measureBottom(src, fit).then((m) => {
+      if (alive && m) setShape({ src, ...m });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [measurable, src, fit]);
+  return useMemo(() => {
+    if (!bottom || !measurable || !shape || shape.src !== src) return bottom;
+    if (bottom.kind === "bermuda") return shape.legT < 0.7 ? { ...bottom, kind: "shorts", legT: shape.legT, hemR: shape.hemR } : bottom;
+    if (shape.legT >= 0.92) return { ...bottom, kind: "bermuda" };
+    return { ...bottom, legT: shape.legT, hemR: shape.hemR };
+  }, [bottom, measurable, shape, src]);
+}
+
 /** El avatar completo, con la ropa puesta. Respira despacito. */
 function Avatar({ dims, skin, look, style }: { dims: BodyDims; skin: string; look: Look; style: AvatarStyle }) {
   // Los brazos se abren según el cuerpo y la ropa (un abrigo grueso los separa más).
@@ -60,7 +92,7 @@ function Avatar({ dims, skin, look, style }: { dims: BodyDims; skin: string; loo
 
   // Si no elegiste nada, el avatar lleva una remera y un short básicos.
   const top = wornTop(look);
-  const bottom = wornBottom(look);
+  const bottom = useMeasuredBottom(wornBottom(look));
   const outer = look.outerwear;
   const acc = look.accessory;
   // Prenda digital: el estampado de cada prenda como calcomanía (el color de la tela ya viene en el look).
@@ -85,7 +117,10 @@ function Avatar({ dims, skin, look, style }: { dims: BodyDims; skin: string; loo
   // cinturón, la remera va metida: ahí el pantalón la envuelve a ella.
   const layers = useMemo(() => {
     const legged = bottom && bottom.kind !== "skirt" && bottom.kind !== "brief";
-    const legs = legsEnvelope(sk, legged ? bottomInflate(bottom) : 0, 0.45, 0.99);
+    // Lo ancho de las piernas del short (y lo que se corren hacia afuera), para que lo de arriba las tape.
+    const extra = legged ? bottomLegExtra(sk, bottom) : null;
+    const shift = legged ? bottomLegShift(sk, bottom) : null;
+    const legs = legsEnvelope(sk, legged ? bottomInflate(bottom) : 0, 0.45, 0.99, extra && shift ? (t) => extra(t) + shift(t) : undefined);
     let below = bottom ? bottomShell(sk, bottom) : null;
     let topRings: Ring[];
     if (top.tucked && below) {

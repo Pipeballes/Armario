@@ -5,6 +5,7 @@
 
 import type { Selection, Slot } from "./avatar";
 import { colorById, kindById } from "./catalog";
+import { sizeDiff } from "./sizes";
 import type { Garment, GarmentDetails, GarmentFit, PatternKind } from "./types";
 
 /** Dibujo que cubre toda la tela. */
@@ -58,8 +59,10 @@ export interface TopLook {
   sideStripes: boolean;
   /** Vestido: largo de la pollera. */
   dress: "none" | "short" | "midi" | "long";
-  /** Metida adentro del pantalón (cuando se usa con cinturón). */
+  /** Metida adentro del pantalón (con cinturón, o si la metés con el botón del probador). */
   tucked: boolean;
+  /** Talles más grande (+) o más chica (−) que el tuyo (0 si es el tuyo o no se sabe). */
+  ease: number;
   print?: PrintRef;
 }
 
@@ -84,10 +87,21 @@ export interface BottomLook {
   drawstring: boolean;
   /** Bragueta a la vista. */
   fly: boolean;
-  pockets: "none" | "jean" | "slant" | "cargo";
+  /** Bolsillos: de jean, en diagonal (chino), en la costura del costado (deportivo) o cargo. */
+  pockets: "none" | "jean" | "slant" | "side" | "cargo";
   sideStripes: boolean;
   /** Raya planchada adelante (pantalón de vestir). */
   crease: boolean;
+  /** Cuánto más ancha que la pierna es la boca del short (en metros, sobre la holgura de la tela). */
+  legWidth: number;
+  /** Radio de la boca de la pierna medido en la foto (si se pudo medir), en metros. */
+  hemR?: number;
+  /** Cómo termina la pierna: simple, botamanga doblada, deshilachada, elástico o tajo al costado. */
+  hem: "simple" | "doblado" | "deshilachado" | "elastico" | "tajo";
+  /** Talles más grande (+) o más chica (−) que el tuyo (0 si es el tuyo o no se sabe). */
+  ease: number;
+  /** La foto de adelante, para medir el largo y el ancho de verdad. */
+  source?: { src: string; fit?: GarmentFit };
   print?: PrintRef;
 }
 
@@ -160,6 +174,8 @@ export interface Look {
   shoes: ShoesLook | null;
   outerwear: OuterLook | null;
   accessory: AccessoryLook | null;
+  /** La parte de arriba va metida adentro del pantalón (se ven la cintura y los bolsillos). */
+  tuck?: boolean;
 }
 
 // ───────────────────────── Colores ─────────────────────────
@@ -343,6 +359,7 @@ function topLook(g: Garment): TopLook {
     sideStripes: Boolean(d.sideStripes),
     dress,
     tucked: false,
+    ease: 0,
     print: printOf(g, 0.62),
   };
 }
@@ -401,7 +418,11 @@ function bottomLook(g: Garment, gender?: string | null): BottomLook {
         ? "jean"
         : waist === "belt" && kind !== "skirt"
           ? "slant"
-          : "none";
+          : kind === "shorts" && sport && !tight
+            ? "side"
+            : kind === "pants" && waist === "elastic" && !tight
+              ? "side"
+              : "none";
   const legT =
     kind !== "shorts"
       ? 1
@@ -433,9 +454,18 @@ function bottomLook(g: Garment, gender?: string | null): BottomLook {
     pockets,
     sideStripes: Boolean(d.sideStripes),
     crease: k === "pantalon-vestir",
+    // Ancho de la pierna: lo que vio la IA, o lo de siempre para ese tipo (el deportivo, suelto).
+    legWidth:
+      d.width ? LEG_WIDTH[d.width] : boxer || tight ? 0.002 : swimShort ? 0.02 : sport ? 0.024 : pockets === "jean" ? 0.01 : 0.013,
+    hem: d.hem ?? (boxer || tight ? "elastico" : "simple"),
+    ease: 0,
+    source: g.photo ? { src: g.photo, fit: g.fit?.front } : undefined,
     print: printOf(g, 1),
   };
 }
+
+/** Cuánto más ancha que la pierna es la boca del short según lo ancho que lo vio la IA. */
+const LEG_WIDTH = { ajustado: 0.003, regular: 0.013, holgado: 0.027, "muy-holgado": 0.045 } as const;
 
 // ───────────────────────── Calzado ─────────────────────────
 
@@ -616,6 +646,7 @@ export const DEFAULT_TOP: TopLook = {
   sideStripes: false,
   dress: "none",
   tucked: false,
+  ease: 0,
 };
 export const DEFAULT_BOTTOM: BottomLook = {
   color: "#8f8a82",
@@ -633,11 +664,17 @@ export const DEFAULT_BOTTOM: BottomLook = {
   pockets: "none",
   sideStripes: false,
   crease: false,
+  legWidth: 0.013,
+  hem: "simple",
+  ease: 0,
 };
 
 /** Lo que el avatar tiene puesto arriba y abajo (con un vestido no lleva nada abajo). */
 export function wornTop(look: Look): TopLook {
-  return look.top ?? DEFAULT_TOP;
+  const top = look.top ?? DEFAULT_TOP;
+  // Metida solo si es una parte de arriba común y hay algo abajo donde meterla.
+  const canTuck = top.cut === "normal" && top.dress === "none" && Boolean(look.bottom) && look.bottom?.kind !== "brief";
+  return look.tuck && canTuck && !top.tucked ? { ...top, tucked: true } : top;
 }
 export function wornBottom(look: Look): BottomLook | null {
   return look.bottom ?? (look.top && look.top.dress !== "none" ? null : DEFAULT_BOTTOM);
@@ -647,7 +684,12 @@ export function wornBottom(look: Look): BottomLook | null {
  * Cómo dibujar la ropa elegida. `gender` decide las prendas que cambian según quién las usa
  * (la "malla de abajo" es short de baño para él y bikini para ella).
  */
-export function lookFrom(sel: Selection, garments: Garment[], gender?: string | null): Look {
+export function lookFrom(
+  sel: Selection,
+  garments: Garment[],
+  gender?: string | null,
+  opts: { sizes?: { top?: string; bottom?: string }; tuck?: boolean } = {},
+): Look {
   const get = (s: Slot) => garments.find((g) => g.id === sel[s]) ?? null;
   const top = get("top");
   const jumpsuit = top?.category === "dress" && (top.kind === "enterito" || top.kind === "jardinero");
@@ -658,7 +700,12 @@ export function lookFrom(sel: Selection, garments: Garment[], gender?: string | 
   const acc = get("accessory");
   const accessory = acc ? accessoryLook(acc) : null;
   let topL = top ? topLook(top) : null;
-  const bottomL = bottom ? (jumpsuit ? { ...bottomLook(bottom, gender), kind: "pants" as const } : bottomLook(bottom, gender)) : null;
+  let bottomL = bottom ? (jumpsuit ? { ...bottomLook(bottom, gender), kind: "pants" as const } : bottomLook(bottom, gender)) : null;
+  // Talle: comparado con el tuyo, la prenda queda más holgada y larga (o más justa y corta).
+  const topEase = top ? (sizeDiff(top.size, opts.sizes?.top) ?? 0) : 0;
+  const bottomEase = bottom && !jumpsuit ? (sizeDiff(bottom.size, opts.sizes?.bottom) ?? 0) : 0;
+  if (topL && topEase) topL = { ...topL, ease: topEase };
+  if (bottomL && bottomEase) bottomL = { ...bottomL, ease: bottomEase };
   // Con cinturón, la parte de arriba va metida adentro del pantalón (si no, el cinturón no se vería).
   if (accessory?.kind === "belt" && topL && topL.cut === "normal" && topL.dress === "none" && bottomL && bottomL.kind !== "brief") {
     topL = { ...topL, tucked: true };
@@ -669,5 +716,6 @@ export function lookFrom(sel: Selection, garments: Garment[], gender?: string | 
     shoes: shoes ? shoesLook(shoes) : null,
     outerwear: outer ? outerLook(outer) : null,
     accessory,
+    tuck: Boolean(opts.tuck),
   };
 }

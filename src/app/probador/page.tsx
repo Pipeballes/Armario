@@ -24,6 +24,7 @@ import {
   avatarOf,
 } from "@/lib/avatar";
 import { suggestOutfits } from "@/lib/outfits";
+import { fitNote, sizeDiff } from "@/lib/sizes";
 import { actions, useArmario } from "@/lib/store";
 import type { AvatarStyle } from "@/lib/types";
 import GarmentPhoto from "@/components/GarmentPhoto";
@@ -70,7 +71,15 @@ export default function ProbadorPage() {
 
   const dims = useMemo(() => bodyDims(profile), [profile]);
   const skin = useMemo(() => skinColor(profile), [profile]);
-  const look = useMemo(() => lookFrom(sel, garments, profile.gender), [sel, garments, profile.gender]);
+  // Remera adentro o afuera del pantalón. Si no elegiste nada arriba y sí abajo, va adentro sola:
+  // así se ven bien la cintura y los bolsillos de lo que te estás probando.
+  const [tuckPref, setTuckPref] = useState<boolean | null>(null);
+  const bottomCategory = garments.find((g) => g.id === sel.bottom)?.category;
+  const tuck = tuckPref ?? (!sel.top && bottomCategory === "bottom");
+  const look = useMemo(
+    () => lookFrom(sel, garments, profile.gender, { sizes: profile.sizes, tuck }),
+    [sel, garments, profile.gender, profile.sizes, tuck],
+  );
   // Las prendas cargadas antes no tienen el ajuste de la foto (o es de una versión vieja): la IA lo
   // calcula la primera vez que te las probás, de a una.
   const [fitting, setFitting] = useState(false);
@@ -115,6 +124,23 @@ export default function ProbadorPage() {
 
   const current = VIEWS.find((v) => v.id === view)!;
 
+  // Se puede meter adentro una parte de arriba común (no un vestido ni un top corto) si hay algo abajo.
+  const shownTop = look.top;
+  const canTuck =
+    (!shownTop || (shownTop.cut === "normal" && shownTop.dress === "none" && !shownTop.tucked)) &&
+    look.bottom !== null &&
+    look.bottom?.kind !== "brief" &&
+    bottomCategory !== "interior";
+
+  // Cómo te queda cada prenda según su talle y el tuyo.
+  const sizeNotes = (["top", "bottom"] as const).flatMap((s) => {
+    const g = garments.find((x) => x.id === sel[s]);
+    if (!g?.size) return [];
+    const mine = profile.sizes?.[s];
+    const diff = sizeDiff(g.size, mine);
+    return [{ slot: s, name: g.name, size: g.size, mine, diff }];
+  });
+
   return (
     <div>
       <h1 className="page-title mb-1">Probador 3D</h1>
@@ -154,6 +180,46 @@ export default function ProbadorPage() {
           </button>
         ))}
       </div>
+
+      {(canTuck || sizeNotes.length > 0) && (
+        <div className="card mb-4 space-y-2 p-3 text-sm">
+          {canTuck && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold">👕 Parte de arriba</span>
+              <div className="flex gap-1.5">
+                <button type="button" className="chip" aria-pressed={!tuck} onClick={() => setTuckPref(false)}>
+                  Afuera
+                </button>
+                <button type="button" className="chip" aria-pressed={tuck} onClick={() => setTuckPref(true)}>
+                  Adentro
+                </button>
+              </div>
+            </div>
+          )}
+          {sizeNotes.map((n) => (
+            <p key={n.slot}>
+              📏 <strong>{n.name}</strong> · talle {n.size}
+              {n.diff !== null ? (
+                <>
+                  {" "}
+                  · vos {n.mine} → <strong>{fitNote(n.diff)}</strong>
+                </>
+              ) : !n.mine ? (
+                <>
+                  {" "}
+                  ·{" "}
+                  <Link href="/perfil#talle" className="underline">
+                    cargá tu talle en Perfil
+                  </Link>{" "}
+                  para ver cómo te queda
+                </>
+              ) : (
+                <span className="text-muted"> · no se puede comparar con tu talle ({n.mine})</span>
+              )}
+            </p>
+          ))}
+        </div>
+      )}
 
       <div className="card mb-4 p-3">
         <button
