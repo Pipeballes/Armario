@@ -21,7 +21,7 @@
   - `prenda`: tipo, color, estampado, estilo, clima, talle, deporte y cantidad, a partir de hasta 3 fotos.
   - `perfil`: subtono, piel, silueta y rasgos para el avatar, a partir de hasta 15 fotos.
   - `elegir`: ordena outfits y explica por qué.
-  - `ajuste`: dónde está la prenda en la foto, cuánto está girada, el color de la tela y dónde está el estampado (para el probador).
+  - `ajuste`: dónde está la prenda en la foto, cuánto está girada, el color de la tela, dónde está el estampado y sus detalles (botones, capucha, cordón, elástico, franjas, bolsillos, largo, dibujo de la tela, tipo de tira del calzado), para el probador. Se le dice qué prenda es para que sepa qué buscar.
 - **`lib/ai-schema.ts`**: qué se le pide a la IA (prompts y formatos JSON) y cómo se valida lo que responde. Se usa en el servidor y en las pruebas.
 - **`lib/ai.ts`**: las llamadas desde el navegador.
 
@@ -33,9 +33,14 @@ El avatar se arma con geometría propia (sin modelos externos) para que cargue r
   - **Brazos**: cuelgan al costado y se abren lo justo para no atravesar la panza ni la cadera, según el cuerpo y la ropa (`armRoom`: un abrigo grueso los separa más).
   - **Articulaciones**: cada bola (hombro, codo, muñeca, cadera, rodilla, tobillo) es un poco más grande que la boca de los tubos que llegan a ella (`jointBalls`), así nunca queda una ranura por la que se vea el interior. La ropa usa las mismas bolas, con el mismo centro y la holgura de la tela.
   - **Ropa**: cada prenda es el cuerpo "inflado" (nunca más finita que la piel) y las capas se respetan: el pantalón, arriba la remera y arriba el abrigo; cada una envuelve a las de abajo, incluidos los muslos (`layerOver`, `legsEnvelope`).
-- **`components/avatar/`**: el dibujo. `shapes.ts` (tubos de corte ovalado y piezas torneadas, con normales suaves), `Body.tsx` (piel: torso, brazos, manos con sus cinco dedos, piernas y pies), `Head.tsx` (cara, 17 peinados, anteojos), `Clothes.tsx` (cada tipo de prenda, calzado y accesorios) y `materials.tsx`.
+- **`components/avatar/`**: el dibujo.
+  - `shapes.ts`: tubos de corte ovalado y piezas torneadas con normales suaves, y parches que se apoyan sobre la tela (bolsillos, tiras, franjas, logos).
+  - `Body.tsx` (piel: torso, brazos, manos con sus cinco dedos, piernas y pies) y `Head.tsx` (cara, 17 peinados, anteojos).
+  - La ropa, un archivo por grupo: `Tops.tsx` (remera, camisa con tira de botones y bolsillo, chomba, escote en V, hoodie con cordones, musculosa, vestido), `Bottoms.tsx` (cintura con presillas o elástica con cordón, bragueta, bolsillos de jean o cargo, franjas, logo en la pierna), `Outer.tsx` (campera, de jean, de cuero, polar, rompevientos, saco, tapado, inflable, poncho), `Shoes.tsx` (cerrados, abiertos arriba como chatitas y tacos, y abiertos como ojotas, chanclas y sandalias, donde se ven los dedos) y `Accessories.tsx` (todos los accesorios).
+  - `parts.tsx` (mangas, bordes, botones, calcomanía del estampado) y `materials.tsx` (sombreado y dibujos de la tela: rayas, cuadros, lunares, flores, camuflado).
 - **`components/Avatar3D.tsx`**: la escena (luces, piso, cámara) y el armado del avatar con la ropa puesta. El lado izquierdo del cuerpo es el espejo del derecho.
-- **`lib/avatar.ts`**: medidas del cuerpo según el perfil, color de piel, peinados, anteojos, qué prenda va en cada lugar del cuerpo (`slotOf`) y cómo dibujarla (`lookFrom`).
+- **`lib/avatar.ts`**: medidas del cuerpo según el perfil, color de piel, peinados, anteojos y qué prenda va en cada lugar del cuerpo (`slotOf`).
+- **`lib/look.ts`**: cómo se ve cada prenda (`lookFrom`). Cada tipo tiene sus detalles de siempre aunque la foto no los muestre (una camisa lleva cuello, tira de botones y puños; un short deportivo, cintura elástica y cordón; una ojota, la tira entre los dedos). Encima va lo que vio la IA: el color real de la tela, el dibujo, el estampado y otros detalles.
 - **`lib/fit.ts`** + **`lib/print-decal.ts`**: la prenda "digitalizada". La IA ubica la prenda y el estampado en la foto (aunque esté torcida); en el navegador se recorta el estampado, se endereza, se le saca la tela de alrededor y se pega como calcomanía sobre la prenda del color de la tela.
 
 ## Agenda, clima y recordatorio

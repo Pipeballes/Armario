@@ -2,7 +2,8 @@
 // Todo en metros para una persona de 1,72 m; el avatar después se escala a la altura real.
 // Es lógica pura (sin three.js) para poder probarla.
 
-import { wornBottom, wornTop, type BodyDims, type BottomLook, type Look, type OuterLook, type TopLook } from "./avatar";
+import type { BodyDims } from "./avatar";
+import { wornBottom, wornTop, type BottomLook, type Look, type OuterLook, type TopLook } from "./look";
 
 export type V3 = [number, number, number];
 
@@ -187,10 +188,11 @@ export function sleeveInflate(look: Pick<TopLook, "ribbed">): number {
 /** Forma del abrigo: hasta dónde llega, cuánta holgura tiene el cuerpo y las mangas, y el vuelo abajo. */
 export function outerFit(kind: OuterLook["kind"]): { hem: number; inflate: number; flare: number; sleeve: number } {
   return {
-    hem: kind === "coat" ? 0.5 : kind === "blazer" ? 0.82 : 0.86,
-    inflate: kind === "puffer" ? 0.045 : kind === "coat" ? 0.03 : 0.028,
-    flare: kind === "coat" ? 0.06 : 0.008,
-    sleeve: kind === "puffer" ? 0.034 : 0.024,
+    hem: kind === "coat" ? 0.5 : kind === "cape" ? 0.8 : kind === "blazer" ? 0.82 : kind === "denim" ? 0.92 : 0.86,
+    inflate: kind === "puffer" ? 0.045 : kind === "cape" ? 0.05 : kind === "coat" || kind === "fleece" ? 0.03 : 0.028,
+    flare: kind === "coat" ? 0.06 : kind === "cape" ? 0.05 : 0.008,
+    // El poncho no tiene mangas: cubre los brazos.
+    sleeve: kind === "puffer" ? 0.034 : kind === "cape" ? 0 : 0.024,
   };
 }
 
@@ -227,9 +229,14 @@ export function topShape(sk: Skeleton, look: TopLook): { hem: number; top: numbe
       return { hem: 1.19, top: 1.37, ...fit };
     case "swimsuit":
       return { hem: sk.crotchY, top: 1.38, ...fit };
-    default:
-      if (look.dress !== "none") return { hem: 0.97, top: look.sleeves === "none" ? 1.39 : neckTop, ...fit };
-      return { hem: 0.87, top: look.sleeves === "none" ? 1.4 : neckTop, ...fit };
+    default: {
+      // Sin mangas pero sin tiras (chaleco tejido): llega hasta el cuello y deja la sisa abierta.
+      const top = look.sleeves === "none" && look.neck === "straps" ? (look.dress !== "none" ? 1.39 : 1.4) : neckTop;
+      if (look.dress !== "none") return { hem: 0.97, top, ...fit };
+      // Metida adentro del pantalón (con cinturón): termina apenas debajo de la cintura, sin vuelo.
+      if (look.tucked) return { hem: 0.985, top, inflate: fit.inflate, flare: 0 };
+      return { hem: 0.87, top, ...fit };
+    }
   }
 }
 
@@ -359,9 +366,13 @@ export function topEnvelope(look: TopLook, rings: Ring[]): Ring[] {
   const hem = rings[0];
   const extraYs = [hem.y + tube * 1.2, ...(look.pocket ? [0.94, 1.06] : [])];
   const all = [...rings, ...extraYs.map((y) => ({ ...ringAt(rings, y), y }))].sort((a, b) => a.y - b.y);
+  const neckY = rings[rings.length - 1].y;
   const out = all.map((r) => {
     let { rx, rz } = r;
     if (look.buttons > 0) rz += 0.006;
+    // Cordones de la capucha y el borde del escote en V, que van por encima de la tela.
+    if (look.drawstring && r.y > neckY - 0.16) rz += 0.01;
+    else if (look.neck === "v" && r.y > neckY - 0.2) rz += 0.005;
     if (look.pocket && r.y >= 0.94 - 1e-6 && r.y <= 1.06 + 1e-6) rz += 0.01;
     if (r.y <= hem.y + tube * 1.2 + 1e-6) {
       rx += tube;
@@ -377,7 +388,8 @@ export function topEnvelope(look: TopLook, rings: Ring[]): Ring[] {
 export function outerShell(sk: Skeleton, look: OuterLook, under: Ring[][] = []): Ring[] {
   const { hem, inflate, flare } = outerFit(look.kind);
   let base: Ring[];
-  if (look.kind !== "coat") base = garmentRings(sk, inflate, hem, 1.48, flare);
+  if (look.kind === "cape") base = capeRings(sk, hem, inflate, flare);
+  else if (look.kind !== "coat") base = garmentRings(sk, inflate, hem, 1.48, flare);
   else {
     const body = garmentRings(sk, inflate, 0.9, 1.48, 0);
     const hip = body[0];
@@ -388,6 +400,48 @@ export function outerShell(sk: Skeleton, look: OuterLook, under: Ring[][] = []):
     ];
   }
   return layerOver(base, under, 0.007);
+}
+
+/**
+ * Poncho o capa: cae desde el cuello como un cono y envuelve los brazos (no tiene mangas). En cada
+ * altura queda por fuera del cuerpo y de los brazos, y nunca se angosta al bajar.
+ */
+function capeRings(sk: Skeleton, hem: number, inflate: number, flare: number): Ring[] {
+  const a = sk.arm(1);
+  const pr = limbProfiles(sk);
+  // Borde de afuera del brazo a cierta altura.
+  const armOut = (y: number) => {
+    if (y >= a.elbow[1]) {
+      const t = Math.min(1, Math.max(0, (a.shoulder[1] - y) / (a.shoulder[1] - a.elbow[1])));
+      return lerp(a.shoulder[0], a.elbow[0], t) + profileAt(pr.upperArm, t);
+    }
+    const t = Math.min(1, Math.max(0, (a.elbow[1] - y) / (a.elbow[1] - a.wrist[1])));
+    return lerp(a.elbow[0], a.wrist[0], t) + profileAt(pr.forearm, t);
+  };
+  const sx = a.shoulder[0];
+  const ys = [hem, 0.88, 0.98, 1.08, 1.18, 1.28, 1.36];
+  const body = ys.map((y) => {
+    const t = ringAt(sk.torso, Math.max(y, sk.torso[0].y + 0.03));
+    const drop = Math.max(0, 1.36 - y);
+    return {
+      y,
+      rx: Math.max(t.rx + inflate, armOut(y) + 0.035) + flare * drop,
+      rz: t.rz + inflate + 0.03 + flare * drop * 0.8,
+      z: t.z,
+    };
+  });
+  // De arriba hacia abajo, cada corte al menos tan ancho como el de arriba (forma de cono).
+  for (let i = body.length - 2; i >= 0; i--) {
+    body[i].rx = Math.max(body[i].rx, body[i + 1].rx);
+    body[i].rz = Math.max(body[i].rz, body[i + 1].rz);
+  }
+  const shoulder = { y: 1.41, rx: sx + sk.deltoid + inflate, rz: ringAt(sk.torso, 1.41).rz + inflate + 0.02, z: 0 };
+  return [
+    ...body,
+    shoulder,
+    { y: 1.445, rx: lerp(shoulder.rx, 0.11, 0.5), rz: lerp(shoulder.rz, 0.1, 0.5), z: -0.004 },
+    { y: 1.48, rx: 0.1, rz: 0.09, z: -0.008 },
+  ];
 }
 
 /** Cuánto se abre una pollera por fuera de la cadera a la altura de las manos. */
@@ -416,7 +470,7 @@ export function armRoom(look: Look): ArmRoom {
   if (bottom) {
     hips = Math.max(hips, bottom.kind === "skirt" ? skirtRoomAtHands(bottom.length) + gap : bottomInflate(bottom) + gap);
   }
-  if (look.outerwear) {
+  if (look.outerwear && look.outerwear.kind !== "cape") {
     const o = outerFit(look.outerwear.kind);
     // El abrigo engorda el cuerpo y también el brazo (la manga).
     torso = Math.max(torso, o.inflate + o.sleeve + gap);

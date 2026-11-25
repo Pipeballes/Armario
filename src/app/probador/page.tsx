@@ -3,11 +3,11 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ensureFit, needsFit } from "@/lib/fit";
+import { ensureFits, needsFit } from "@/lib/fit";
+import { lookFrom } from "@/lib/look";
 import {
   SLOTS,
   bodyDims,
-  lookFrom,
   selectionFrom,
   skinColor,
   slotOf,
@@ -70,20 +70,24 @@ export default function ProbadorPage() {
 
   const dims = useMemo(() => bodyDims(profile), [profile]);
   const skin = useMemo(() => skinColor(profile), [profile]);
-  const look = useMemo(() => lookFrom(sel, garments), [sel, garments]);
-  // Las prendas cargadas antes no tienen el ajuste de la foto: la IA lo calcula la primera vez que te las probás.
+  const look = useMemo(() => lookFrom(sel, garments, profile.gender), [sel, garments, profile.gender]);
+  // Las prendas cargadas antes no tienen el ajuste de la foto (o es de una versión vieja): la IA lo
+  // calcula la primera vez que te las probás, de a una.
   const [fitting, setFitting] = useState(false);
-  const selectedTop = garments.find((g) => g.id === sel.top);
+  const toFit = useMemo(
+    () => Object.values(sel).flatMap((id) => garments.filter((g) => g.id === id && needsFit(g))),
+    [sel, garments],
+  );
   useEffect(() => {
-    if (!account || !selectedTop || !needsFit(selectedTop)) return;
+    if (!account || toFit.length === 0) return;
     let alive = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setFitting(true);
-    ensureFit(selectedTop).finally(() => alive && setFitting(false));
+    ensureFits(toFit).finally(() => alive && setFitting(false));
     return () => {
       alive = false;
     };
-  }, [account, selectedTop]);
+  }, [account, toFit]);
   const style = useMemo(() => avatarOf(profile), [profile]);
 
   if (!ready) return <Loading />;

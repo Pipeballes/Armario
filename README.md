@@ -14,7 +14,7 @@ Armario digital con asesor de estilo. Subís fotos de tu ropa, la app la ordena 
 | **Agregar prenda** | Hasta 3 fotos (adelante, atrás y etiqueta). La IA completa tipo, color, lisa/estampada, estilo, clima, talle (en calzado, talle US) y si es deportiva. Tipos de prenda según el género. Contador "¿cuántas tenés iguales?" para medias y ropa interior. Limpieza automática del fondo. |
 | **¿Qué me pongo?** | Outfits para una ocasión (o un evento de tu calendario) con el clima del momento, explicando por qué funcionan. 👍/👎 para que aprenda, "que la IA elija el mejor" y "probar en 3D". |
 | **Mi semana** | Un outfit por día según agenda y pronóstico, sin repetir ropa, con días fijados y la lista de ropa para tener lista. |
-| **Probador 3D** | Avatar caricatura con tu altura, silueta, piel, peinado, anteojos y expresión. Se viste con tu ropa (color, tipo de prenda y el estampado real recortado de la foto). Vistas de frente, costado, espalda, cara y "cómo te ven". |
+| **Probador 3D** | Avatar caricatura con tu altura, silueta, piel, peinado, anteojos y expresión. Se viste con tu ropa "digitalizada": el color real de la tela, el estampado recortado de la foto y los detalles de cada tipo de prenda (botones de la camisa, cordón del short, tira de la ojota, bolsillos, franjas, capucha, accesorios). Vistas de frente, costado, espalda, cara y "cómo te ven". |
 | **Perfil** | Género, fotos tuyas analizadas por la IA (subtono, piel, silueta y rasgos del avatar), estilos, inspiración, calendarios (iPhone, Google, feriados), recordatorio a la mañana y copia de seguridad. |
 
 Sin cuenta, todo queda en el navegador (IndexedDB) y la app funciona igual, sin IA. Con cuenta (código de 6 números por mail, sin contraseña) se guarda en la nube y se habilita la IA.

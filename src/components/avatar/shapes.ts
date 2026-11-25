@@ -144,3 +144,133 @@ export function basisQuaternion(down: THREE.Vector3, out: THREE.Vector3): THREE.
   const z = new THREE.Vector3().crossVectors(x, y).normalize();
   return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
 }
+
+// ───────────────────────── Detalles sobre la ropa ─────────────────────────
+// Bolsillos, tiras de botones, franjas y logos se apoyan sobre la superficie de la prenda: en el
+// torso (un óvalo por altura) o en una pieza torneada (pierna, brazo). Ángulos: 0 = adelante,
+// +π/2 = hacia +x (el costado izquierdo del avatar, que mira hacia +z).
+
+/** Punto sobre el óvalo de la prenda a cierta altura y ángulo, separado `off` hacia afuera. */
+export function shellPoint(shell: Ring[], y: number, phi: number, off = 0): THREE.Vector3 {
+  const r = ringAtRings(shell, y);
+  const x = r.rx * Math.sin(phi);
+  const z = r.rz * Math.cos(phi);
+  // Normal del óvalo en ese punto.
+  const nx = x / (r.rx * r.rx);
+  const nz = z / (r.rz * r.rz);
+  const len = Math.hypot(nx, nz) || 1;
+  return new THREE.Vector3(x + (nx / len) * off, y, r.z + z + (nz / len) * off);
+}
+
+/** Ángulo del punto de adelante (o de atrás) del óvalo que está a cierta x. */
+export function phiAtX(shell: Ring[], y: number, x: number, back = false): number {
+  const r = ringAtRings(shell, y);
+  const s = Math.asin(Math.max(-0.98, Math.min(0.98, x / r.rx)));
+  return back ? Math.PI - s : s;
+}
+
+/**
+ * Parche curvo pegado a la prenda: de `y0` a `y1`, y en cada altura entre los ángulos que diga
+ * `range`. La textura (si tiene) va de izquierda a derecha y de abajo arriba.
+ */
+export function shellPatch(
+  shell: Ring[],
+  y0: number,
+  y1: number,
+  range: (y: number) => [number, number],
+  off = 0.0015,
+  nx = 12,
+  ny = 8,
+): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const uv: number[] = [];
+  for (let j = 0; j <= ny; j++) {
+    const y = y0 + ((y1 - y0) * j) / ny;
+    const [a, b] = range(y);
+    for (let i = 0; i <= nx; i++) {
+      const p = shellPoint(shell, y, a + ((b - a) * i) / nx, off);
+      pos.push(p.x, p.y, p.z);
+      uv.push(i / nx, j / ny);
+    }
+  }
+  return gridGeometry(pos, uv, nx, ny);
+}
+
+/** Marco de una pieza torneada de `a` a `b`: eje, "adelante" y "costado" (+x). */
+export function limbFrame(a: V3, b: V3) {
+  const va = new THREE.Vector3(...a);
+  const vb = new THREE.Vector3(...b);
+  const d = vb.clone().sub(va).normalize();
+  const fwd = new THREE.Vector3(0, 0, 1).sub(d.clone().multiplyScalar(d.z)).normalize();
+  const side = new THREE.Vector3().crossVectors(fwd, d).normalize();
+  return { a: va, b: vb, d, fwd, side };
+}
+
+/** Punto sobre una pieza torneada: `t` a lo largo (0 en a, 1 en b), a cierto ángulo y radio. */
+export function limbPoint(frame: ReturnType<typeof limbFrame>, t: number, theta: number, r: number): THREE.Vector3 {
+  return frame.a
+    .clone()
+    .lerp(frame.b, t)
+    .addScaledVector(frame.fwd, Math.cos(theta) * r)
+    .addScaledVector(frame.side, Math.sin(theta) * r);
+}
+
+/** Parche curvo sobre una pieza torneada (bolsillo cargo, franja de la pierna, logo). */
+export function limbPatch(
+  frame: ReturnType<typeof limbFrame>,
+  t0: number,
+  t1: number,
+  theta0: number,
+  theta1: number,
+  radius: (t: number) => number,
+  nx = 10,
+  ny = 8,
+): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const uv: number[] = [];
+  // De abajo (t1) hacia arriba (t0), así la textura queda derecha.
+  for (let j = 0; j <= ny; j++) {
+    const t = t1 + ((t0 - t1) * j) / ny;
+    for (let i = 0; i <= nx; i++) {
+      const p = limbPoint(frame, t, theta0 + ((theta1 - theta0) * i) / nx, radius(t));
+      pos.push(p.x, p.y, p.z);
+      uv.push(i / nx, j / ny);
+    }
+  }
+  return gridGeometry(pos, uv, nx, ny);
+}
+
+function gridGeometry(pos: number[], uv: number[], nx: number, ny: number): THREE.BufferGeometry {
+  const idx: number[] = [];
+  for (let j = 0; j < ny; j++)
+    for (let i = 0; i < nx; i++) {
+      const a = j * (nx + 1) + i;
+      const b = a + nx + 1;
+      idx.push(a, a + 1, b, a + 1, b + 1, b);
+    }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/** Cordón, costura o tira que pasa por varios puntos. */
+export function pathTube(points: THREE.Vector3[], r: number, segments = 32): THREE.BufferGeometry {
+  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), segments, r, 6, false);
+}
+
+/** Óvalo interpolado entre cortes (igual que ringAt de skeleton, sin importar desde ahí). */
+function ringAtRings(rings: Ring[], y: number): Ring {
+  if (y <= rings[0].y) return rings[0];
+  for (let i = 1; i < rings.length; i++) {
+    const a = rings[i - 1];
+    const b = rings[i];
+    if (y <= b.y) {
+      const t = (y - a.y) / (b.y - a.y);
+      return { y, rx: a.rx + (b.rx - a.rx) * t, rz: a.rz + (b.rz - a.rz) * t, z: a.z + (b.z - a.z) * t };
+    }
+  }
+  return rings[rings.length - 1];
+}

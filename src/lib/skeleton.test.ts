@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { bodyDims } from "./avatar";
 import { buildSkeleton, ringAt, shellRings } from "./skeleton";
+import { DEFAULT_BOTTOM, type BottomLook, type OuterLook } from "./look";
 import { EMPTY_PROFILE } from "./types";
 
 const dims = (p: Partial<typeof EMPTY_PROFILE>) => bodyDims({ ...EMPTY_PROFILE, ...p });
+const pants = (): BottomLook => ({ ...DEFAULT_BOTTOM, kind: "pants", waist: "belt", legT: 1, fly: true });
+const outer = (kind: OuterLook["kind"]): OuterLook => ({ color: "#123", pattern: null, trim: "#000", kind, hood: false, closure: "zip" });
 
 describe("esqueleto", () => {
   for (const [nombre, p] of [
@@ -208,9 +211,10 @@ describe("brazos al costado", () => {
 
   it("un abrigo grueso separa más los brazos que una musculosa", async () => {
     const { armRoom } = await import("./skeleton");
+    const { DEFAULT_TOP } = await import("./look");
     const base = { top: null, bottom: null, shoes: null, outerwear: null, accessory: null };
-    const tank = armRoom({ ...base, top: { color: "#fff", striped: false, sleeves: "none", neck: "straps", cut: "normal", buttons: 0, pocket: false, ribbed: false, dress: "none" } });
-    const puffer = armRoom({ ...base, outerwear: { color: "#f80", striped: false, kind: "puffer", hood: false } });
+    const tank = armRoom({ ...base, top: { ...DEFAULT_TOP, sleeves: "none", neck: "straps" } });
+    const puffer = armRoom({ ...base, outerwear: outer("puffer") });
     expect(puffer.torso).toBeGreaterThan(tank.torso + 0.03);
     const sk1 = buildSkeleton(dims({ gender: "hombre" }), tank);
     const sk2 = buildSkeleton(dims({ gender: "hombre" }), puffer);
@@ -221,13 +225,13 @@ describe("brazos al costado", () => {
 describe("capas de ropa", () => {
   it("cada prenda tapa a la de abajo donde se superponen (pantalón → remera → saco, pollera → saco)", async () => {
     const { bottomShell, outerShell, topShell } = await import("./skeleton");
-    const { DEFAULT_TOP } = await import("./avatar");
+    const { DEFAULT_TOP } = await import("./look");
     const sk = buildSkeleton(dims({ gender: "mujer", bodyType: "triangulo" }));
-    const jean = bottomShell(sk, { color: "#000", striped: false, kind: "pants", length: "mini", cuffs: false, wide: false, tight: false });
-    const mini = bottomShell(sk, { color: "#000", striped: false, kind: "skirt", length: "mini", cuffs: false, wide: false, tight: false });
+    const jean = bottomShell(sk, pants());
+    const mini = bottomShell(sk, { ...pants(), kind: "skirt" });
     for (const below of [jean, mini]) {
       const top = topShell(sk, DEFAULT_TOP, [below]);
-      const blazer = outerShell(sk, { color: "#123", striped: false, kind: "blazer", hood: false }, [top, below]);
+      const blazer = outerShell(sk, outer("blazer"), [top, below]);
       const check = (over: typeof top, under: typeof top) => {
         const lo = Math.max(over[0].y, under[0].y);
         const hi = Math.min(over[over.length - 1].y, under[under.length - 1].y);
@@ -246,10 +250,10 @@ describe("capas de ropa", () => {
 describe("la remera tapa los muslos", () => {
   it("ningún punto de la pierna del pantalón (ni la bola de la cadera) queda fuera de la remera", async () => {
     const { bottomShell, jointBalls, legsEnvelope, limbProfiles, profileAt, topShell } = await import("./skeleton");
-    const { DEFAULT_TOP } = await import("./avatar");
+    const { DEFAULT_TOP } = await import("./look");
     for (const p of [{ gender: "hombre" as const }, { gender: "mujer" as const, bodyType: "triangulo" as const }]) {
       const sk = buildSkeleton(dims(p));
-      const jean = { color: "#000", striped: false, kind: "pants" as const, length: "mini" as const, cuffs: false, wide: false, tight: false };
+      const jean = pants();
       const inf = 0.012;
       const top = topShell(sk, DEFAULT_TOP, [bottomShell(sk, jean), legsEnvelope(sk, inf, 0.45, 0.99)]);
       const l = sk.leg(1);
@@ -275,14 +279,14 @@ describe("la remera tapa los muslos", () => {
 describe("detalles debajo del abrigo", () => {
   it("el ruedo elastizado, los botones y el bolsillo canguro quedan adentro del abrigo", async () => {
     const { outerShell, topEnvelope, topHemTube, topShell } = await import("./skeleton");
-    const { DEFAULT_TOP } = await import("./avatar");
+    const { DEFAULT_TOP } = await import("./look");
     const sk = buildSkeleton(dims({ gender: "hombre" }));
     const hoodie = { ...DEFAULT_TOP, ribbed: true, pocket: true, neck: "hood" as const, sleeves: "long" as const };
     const shirt = { ...DEFAULT_TOP, buttons: 5 as const, neck: "collar" as const };
     for (const top of [hoodie, shirt]) {
       const rings = topShell(sk, top);
       for (const kind of ["jacket", "blazer", "coat", "vest"] as const) {
-        const coat = outerShell(sk, { color: "#111", striped: false, kind, hood: false }, [topEnvelope(top, rings)]);
+        const coat = outerShell(sk, outer(kind), [topEnvelope(top, rings)]);
         // Ruedo: un toro de radio `tube` alrededor del borde de abajo.
         const tube = topHemTube(top);
         const hem = rings[0];

@@ -9,37 +9,43 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import { cameraFor, wornBottom, wornTop, type BodyDims, type Look, type View } from "@/lib/avatar";
+import { cameraFor, type BodyDims, type View } from "@/lib/avatar";
+import { wornBottom, wornTop, type Look } from "@/lib/look";
 import {
   armRoom,
   bottomInflate,
   bottomShell,
   buildSkeleton,
+  layerOver,
   legsEnvelope,
+  limbProfiles,
   outerShell,
+  profileAt,
+  ringAt,
   skirtRings,
+  sleeveInflate,
   topEnvelope,
   topShell,
   type Ring,
   type V3,
 } from "@/lib/skeleton";
 import type { AvatarStyle } from "@/lib/types";
+import { type AccessoryContext, Accessory } from "./avatar/Accessories";
 import BodySkin from "./avatar/Body";
-import {
-  Accessory,
-  BootShaft,
-  BottomGarment,
-  HEEL_LIFT,
-  HEEL_PITCH,
-  OuterGarment,
-  Shoe,
-  pantCalfT,
-  pantsOverBoots,
-  Skirt,
-  TopGarment,
-  usePrintDecal,
-} from "./avatar/Clothes";
+import { BottomGarment, pantCalfT, pantsOverBoots } from "./avatar/Bottoms";
 import Head from "./avatar/Head";
+import { OuterGarment } from "./avatar/Outer";
+import { usePrintDecal } from "./avatar/parts";
+import { BootShaft, HEEL_LIFT, HEEL_PITCH, Shoe, soleLift } from "./avatar/Shoes";
+import { Skirt, TopGarment } from "./avatar/Tops";
+
+/** Anillos que ocupa una banda alrededor de la cintura (cinturón, riñonera), para taparla con el abrigo. */
+function bandAround(rings: Ring[], y0: number, y1: number, grow: number): Ring[] {
+  return [y0, y1].map((y) => {
+    const r = ringAt(rings, y);
+    return { ...r, y, rx: r.rx + grow, rz: r.rz + grow };
+  });
+}
 
 /** El avatar completo, con la ropa puesta. Respira despacito. */
 function Avatar({ dims, skin, look, style }: { dims: BodyDims; skin: string; look: Look; style: AvatarStyle }) {
@@ -55,53 +61,90 @@ function Avatar({ dims, skin, look, style }: { dims: BodyDims; skin: string; loo
   const top = wornTop(look);
   const bottom = wornBottom(look);
   const outer = look.outerwear;
-  // Prenda digital: el color de la tela que vio la IA, y el estampado como calcomanía.
-  const decalFront = usePrintDecal(look.top?.print?.front, look.top?.print?.fitFront);
-  const decalBack = usePrintDecal(look.top?.print?.back, look.top?.print?.fitBack);
-  const topColor = look.top?.print?.fitFront?.fabric ?? top.color;
+  const acc = look.accessory;
+  // Prenda digital: el estampado de cada prenda como calcomanía (el color de la tela ya viene en el look).
+  const topFront = usePrintDecal(look.top?.print?.front, look.top?.print?.fitFront);
+  const topBack = usePrintDecal(look.top?.print?.back, look.top?.print?.fitBack);
+  const bottomFront = usePrintDecal(look.bottom?.print?.front, look.bottom?.print?.fitFront);
+  const bottomBack = usePrintDecal(look.bottom?.print?.back, look.bottom?.print?.fitBack);
+  const outerFront = usePrintDecal(outer?.print?.front, outer?.print?.fitFront);
+  const outerBack = usePrintDecal(outer?.print?.back, outer?.print?.fitBack);
   const shoes = look.shoes;
   const heel = shoes?.kind === "heel";
-  const covered = Boolean(shoes && shoes.kind !== "sandal");
-  const hatOn = look.accessory?.kind === "cap" || look.accessory?.kind === "beanie" || look.accessory?.kind === "hat";
+  const hatOn = acc?.kind === "cap" || acc?.kind === "beanie" || acc?.kind === "hat";
+  // Anteojos de sol elegidos como accesorio: los dibuja la cabeza, del color de la prenda.
+  const headStyle = useMemo(
+    () => (acc?.kind === "sunglasses" ? { ...style, glasses: "sol" as const, glassesColor: acc.color } : style),
+    [style, acc],
+  );
 
-  // Capas de ropa: cada prenda envuelve a las que van debajo (pantalón → remera → abrigo).
+  // Capas de ropa: cada prenda envuelve a las que van debajo (pantalón → remera → abrigo). Con
+  // cinturón, la remera va metida: ahí el pantalón la envuelve a ella.
   const layers = useMemo(() => {
-    const below = bottom ? bottomShell(sk, bottom) : null;
-    // Los muslos (piel, o la pierna del pantalón) sobresalen un poco adelante: lo de arriba los tapa.
     const legged = bottom && bottom.kind !== "skirt" && bottom.kind !== "brief";
     const legs = legsEnvelope(sk, legged ? bottomInflate(bottom) : 0, 0.45, 0.99);
-    const topRings = topShell(sk, top, below ? [below, legs] : [legs]);
+    let below = bottom ? bottomShell(sk, bottom) : null;
+    let topRings: Ring[];
+    if (top.tucked && below) {
+      topRings = topShell(sk, top, []);
+      below = layerOver(below, [topEnvelope(top, topRings)]);
+    } else {
+      topRings = topShell(sk, top, below ? [below, legs] : [legs]);
+    }
     const dress = top.dress !== "none" ? skirtRings(sk.torso, 0.98, top.dress) : null;
+    const waistGear = below && (acc?.kind === "belt" || acc?.kind === "waistbag") ? bandAround(below, 0.975, 1.025, 0.012) : null;
     const outerRings = outer
-      ? outerShell(sk, outer, [topEnvelope(top, topRings), below, dress, legs].filter((r): r is Ring[] => r !== null))
+      ? outerShell(
+          sk,
+          outer,
+          [top.tucked ? topRings : topEnvelope(top, topRings), below, dress, legs, waistGear].filter((r): r is Ring[] => r !== null),
+        )
       : null;
-    return { topRings, outerRings };
-  }, [sk, top, bottom, outer]);
+    return { topRings, below, outerRings };
+  }, [sk, top, bottom, outer, acc]);
+
+  // Dónde se apoyan los accesorios: sobre lo de más afuera.
+  const accCtx = useMemo((): AccessoryContext => {
+    const prof = limbProfiles(sk);
+    // Solo el puño de la camisa llega a la muñeca (las otras mangas terminan antes).
+    const shirtCuff = top.sleeves === "long" && top.cuffs && (!outer || outer.kind === "vest" || outer.kind === "cape");
+    return {
+      sk,
+      outer: layers.outerRings ?? layers.topRings,
+      waist: layers.below,
+      wristCover: shirtCuff ? profileAt(prof.forearm, 0.88) + sleeveInflate(top) + 0.0055 : 0,
+    };
+  }, [sk, layers, top, outer]);
 
   return (
-    <group position={[0, heel ? HEEL_LIFT : 0, 0]}>
+    <group position={[0, heel ? HEEL_LIFT : soleLift(shoes), 0]}>
       <group ref={breathe}>
-        <BodySkin sk={sk} skin={skin} barefoot={!covered && !heel && !shoes} />
-        <Head skin={skin} style={style} cap={hatOn} />
-        {bottom && (
+        <BodySkin sk={sk} skin={skin} barefoot={!shoes} />
+        <Head skin={skin} style={headStyle} cap={hatOn} />
+        {bottom && layers.below && (
           <BottomGarment
             sk={sk}
             look={bottom}
-            covered={Boolean(outer) || (top.cut === "normal" && top.dress === "none") || top.cut === "swimsuit"}
+            shell={layers.below}
+            covered={Boolean(outer) || (!top.tucked && ((top.cut === "normal" && top.dress === "none") || top.cut === "swimsuit"))}
+            decalFront={bottomFront}
+            decalBack={bottomBack}
           />
         )}
         <TopGarment
           sk={sk}
           look={top}
           shell={layers.topRings}
-          color={topColor}
-          showSleeves={!outer}
-          decalFront={outer ? null : decalFront}
-          decalBack={outer ? null : decalBack}
+          skin={skin}
+          showSleeves={!outer || outer.kind === "vest"}
+          decalFront={outer && outer.kind !== "vest" ? null : topFront}
+          decalBack={outer && outer.kind !== "vest" ? null : topBack}
         />
-        {top.dress !== "none" && <Skirt sk={sk} from={0.98} length={top.dress} color={topColor} striped={top.striped} />}
-        {outer && layers.outerRings && <OuterGarment sk={sk} look={outer} shell={layers.outerRings} />}
-        {look.accessory && <Accessory look={look.accessory} />}
+        {top.dress !== "none" && <Skirt sk={sk} from={0.98} length={top.dress} color={top.color} pattern={top.pattern} />}
+        {outer && layers.outerRings && (
+          <OuterGarment sk={sk} look={outer} shell={layers.outerRings} decalFront={outerFront} decalBack={outerBack} />
+        )}
+        {acc && <Accessory look={acc} ctx={accCtx} />}
         {shoes &&
           ([1, -1] as const).map((side) => {
             const ankle = sk.leg(1).ankle;
