@@ -35,7 +35,7 @@ describe("parseFit (prenda digital)", () => {
   it("devuelve la caja de 0 a 1, el giro y el color", async () => {
     const { parseFit } = await import("./ai-schema");
     const f = parseFit(base)!;
-    expect(f.v).toBe(3);
+    expect(f.v).toBe(4);
     expect(f.box).toEqual([0.2, 0.1, 0.8, 0.9]);
     expect(f.angle).toBe(12);
     expect(f.fabric).toBe("#161b24");
@@ -59,6 +59,8 @@ describe("parseFit (prenda digital)", () => {
       leg_length: "muslo",
       sleeves: "",
       strap: "dedo",
+      width: "holgado",
+      hem: "tajo",
     })!;
     expect(f.details).toEqual({
       trim: "#ffffff",
@@ -71,6 +73,8 @@ describe("parseFit (prenda digital)", () => {
       pockets: "cargo",
       legLength: "muslo",
       strap: "dedo",
+      width: "holgado",
+      hem: "tajo",
     });
     const bad = parseFit({ ...base, trim: "blanco", pattern: "liso", buttons: -2, pockets: "ninguno", strap: "otra" })!;
     expect(bad.details).toBeUndefined();

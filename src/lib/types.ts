@@ -70,6 +70,8 @@ export interface Profile {
   weekPlan?: Record<string, string[]>;
   /** Outfits que marcaste con 👍 / 👎 (claves de ids ordenados). */
   feedback?: { liked: string[]; disliked: string[] };
+  /** Tu talle de siempre (arriba y abajo), para ver en el probador si una prenda te queda grande o chica. */
+  sizes?: { top?: string; bottom?: string };
 }
 
 /** Dónde está la prenda en la foto, cuánto está girada y de qué color es la tela. */
@@ -102,6 +104,10 @@ export interface GarmentDetails {
   sleeves?: "sin" | "cortas" | "largas";
   /** Tira del calzado abierto: entre los dedos (ojota), una ancha (chancla) o varias (sandalia). */
   strap?: "dedo" | "ancha" | "tiras";
+  /** Qué tan ancha es (la pierna de un short o un pantalón, el cuerpo de una remera). */
+  width?: "ajustado" | "regular" | "holgado" | "muy-holgado";
+  /** Cómo termina la pierna o el ruedo: simple, doblado, deshilachado, con elástico o con tajo al costado. */
+  hem?: "simple" | "doblado" | "deshilachado" | "elastico" | "tajo";
 }
 
 export interface GarmentFit {
@@ -127,7 +133,7 @@ export interface GarmentFit {
 }
 
 /** Versión actual del ajuste de fotos. */
-export const FIT_VERSION = 3;
+export const FIT_VERSION = 4;
 
 export type HairId =
   | "corto"

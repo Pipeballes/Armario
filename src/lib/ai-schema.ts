@@ -292,7 +292,9 @@ Y los detalles, para dibujarla como es (si algo no se ve en la foto, poné lo qu
 - pockets: "ninguno", "pecho" (bolsillo en el pecho), "canguro", "jean" (bolsillos de jean), "cargo" (bolsillos grandes a los costados de las piernas) o "parche" (bolsillos cosidos por fuera).
 - leg_length: solo en partes de abajo: "micro" (muy corto), "muslo" (a mitad del muslo), "rodilla" o "largo". Si no es una parte de abajo, "".
 - sleeves: solo en partes de arriba y abrigos: "sin", "cortas" o "largas". Si no tiene mangas que mirar, "".
-- strap: solo en calzado abierto: "dedo" (ojota con la tira entre los dedos), "ancha" (una tira ancha sobre el pie) o "tiras" (sandalia con varias tiras). Si no, "".`;
+- strap: solo en calzado abierto: "dedo" (ojota con la tira entre los dedos), "ancha" (una tira ancha sobre el pie) o "tiras" (sandalia con varias tiras). Si no, "".
+- width: qué tan ancha es: "ajustado" (pegado al cuerpo), "regular", "holgado" o "muy-holgado" (como un short de básquet). En un short o pantalón, mirá la boca de la pierna comparada con la cintura.
+- hem: cómo termina la pierna o el ruedo: "simple", "doblado" (con la botamanga doblada hacia afuera), "deshilachado" (cortado, con hilos sueltos), "elastico" o "tajo" (con un corte a los costados, como los shorts de correr).`;
 
 /** Instrucciones para el ajuste; si se sabe qué prenda es, la IA busca mejor sus detalles. */
 export function fitPrompt(context?: { category?: string; kind?: string }): string {
@@ -329,6 +331,8 @@ export const FIT_SCHEMA = {
     leg_length: { type: "STRING", enum: ["", "micro", "muslo", "rodilla", "largo"] },
     sleeves: { type: "STRING", enum: ["", "sin", "cortas", "largas"] },
     strap: { type: "STRING", enum: ["", "dedo", "ancha", "tiras"] },
+    width: { type: "STRING", enum: ["ajustado", "regular", "holgado", "muy-holgado"] },
+    hem: { type: "STRING", enum: ["simple", "doblado", "deshilachado", "elastico", "tajo"] },
   },
   required: ["box", "angle", "fabric", "has_print"],
 };
@@ -383,6 +387,10 @@ export function parseDetails(r: Record<string, unknown>): import("./types").Garm
   if (sleeves) d.sleeves = sleeves;
   const strap = oneOf(r.strap, ["dedo", "ancha", "tiras"] as const);
   if (strap) d.strap = strap;
+  const width = oneOf(r.width, ["ajustado", "regular", "holgado", "muy-holgado"] as const);
+  if (width) d.width = width;
+  const hem = oneOf(r.hem, ["simple", "doblado", "deshilachado", "elastico", "tajo"] as const);
+  if (hem && hem !== "simple") d.hem = hem;
   return Object.keys(d).length ? d : undefined;
 }
 
@@ -397,7 +405,7 @@ export function parseFit(raw: unknown): import("./types").GarmentFit | null {
   if (!fabric) return null;
   const pbox = r.has_print === true ? toBox(r.print_box) : null;
   return {
-    v: 3,
+    v: 4,
     angle: Math.round(angle * 10) / 10,
     box,
     fabric,

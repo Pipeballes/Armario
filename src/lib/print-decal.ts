@@ -112,7 +112,7 @@ export function unrotatedSize(bw: number, bh: number, angleDeg: number): [number
   return [Math.max(pw, floor), Math.max(ph, floor)];
 }
 
-function loadImage(src: string): Promise<HTMLImageElement> {
+export function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -195,28 +195,12 @@ function isFabric(r: number, g: number, b: number, fabric: RGB): boolean {
   return Math.abs(r - fabric[0] * k) + Math.abs(g - fabric[1] * k) + Math.abs(b - fabric[2] * k) < 45;
 }
 
-export interface PrintScan {
-  /** Píxeles de dibujo y de prenda (tela + dibujo), sin contar el borde de la prenda. */
-  ink: number;
-  garment: number;
-  /** Caja del dibujo [x0, y0, x1, y1] (sin los puntitos sueltos de las puntas) y la de la prenda. */
-  box: [number, number, number, number] | null;
-  garmentBox: [number, number, number, number] | null;
-  /** En una grilla de 4×4 sobre la prenda: cuántas celdas tienen dibujo y cuántas se miraron. */
-  cells: { inked: number; total: number };
-}
-
 /**
- * Recorre la prenda (ya derecha) y separa tela, dibujo y fondo. `bg` es el color del fondo (o null
- * si no hay), y lo transparente también cuenta como fondo. El borde de la prenda no se mira: ahí
- * se mezcla con el fondo y parecería dibujo.
+ * Fondo de la foto: lo transparente y lo parecido al color del fondo que está conectado con el
+ * borde de la imagen (un gris claro en el borde de un logo no es fondo, aunque se parezca).
  */
-export function scanPrint(d: Uint8ClampedArray, w: number, h: number, fabric: RGB, bg: RGB | null): PrintScan {
+export function backgroundMask(d: Uint8ClampedArray, w: number, h: number, fabric: RGB, bg: RGB | null): Uint8Array {
   const n = w * h;
-  const isGarment = new Uint8Array(n);
-  const isInk = new Uint8Array(n);
-  // Fondo: lo transparente y lo parecido al color del fondo que está conectado con el borde de la
-  // imagen (un gris claro en el borde de un logo no es fondo, aunque se parezca).
   const bgLike = (p: number) => {
     const i = p * 4;
     if (d[i + 3] < 128) return true;
@@ -250,6 +234,30 @@ export function scanPrint(d: Uint8ClampedArray, w: number, h: number, fabric: RG
     if (p >= w) seed(p - w);
     if (p < n - w) seed(p + w);
   }
+  return isBg;
+}
+
+export interface PrintScan {
+  /** Píxeles de dibujo y de prenda (tela + dibujo), sin contar el borde de la prenda. */
+  ink: number;
+  garment: number;
+  /** Caja del dibujo [x0, y0, x1, y1] (sin los puntitos sueltos de las puntas) y la de la prenda. */
+  box: [number, number, number, number] | null;
+  garmentBox: [number, number, number, number] | null;
+  /** En una grilla de 4×4 sobre la prenda: cuántas celdas tienen dibujo y cuántas se miraron. */
+  cells: { inked: number; total: number };
+}
+
+/**
+ * Recorre la prenda (ya derecha) y separa tela, dibujo y fondo. `bg` es el color del fondo (o null
+ * si no hay), y lo transparente también cuenta como fondo. El borde de la prenda no se mira: ahí
+ * se mezcla con el fondo y parecería dibujo.
+ */
+export function scanPrint(d: Uint8ClampedArray, w: number, h: number, fabric: RGB, bg: RGB | null): PrintScan {
+  const n = w * h;
+  const isGarment = new Uint8Array(n);
+  const isInk = new Uint8Array(n);
+  const isBg = backgroundMask(d, w, h, fabric, bg);
   let gx0 = w;
   let gy0 = h;
   let gx1 = -1;
@@ -356,16 +364,22 @@ function dominantColor(d: Uint8ClampedArray, keep: (i: number) => boolean): RGB 
   return best ? [best.r / best.n, best.g / best.n, best.b / best.n] : null;
 }
 
+/** La prenda de la foto, derecha y recortada, con el color de su tela y el del fondo. */
+export interface UprightGarment {
+  cut: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  data: ImageData;
+  cw: number;
+  ch: number;
+  fabric: RGB;
+  bg: RGB;
+}
+
 /**
- * Mira la foto de una prenda estampada y devuelve su estampado: suelto (recortado, con su lugar
- * sobre la prenda) o por toda la tela (un pedazo cuadrado de la tela). `body` es qué parte del ancho
- * es el cuerpo de la prenda (en una remera, sin las mangas); `allover` fuerza el pedazo de tela.
+ * Endereza y recorta la prenda de la foto: con la caja y el giro de la IA si los hay; si no, con
+ * lo que no es fondo. El color de la tela es el de la IA o el más repetido de la prenda.
  */
-export async function analyzePhotoPrint(
-  src: string,
-  fit: GarmentFit | undefined,
-  opts: { body: number; allover?: boolean },
-): Promise<PhotoPrint | null> {
+export async function uprightGarment(src: string, fit: GarmentFit | undefined, maxSide = 360): Promise<UprightGarment | null> {
   const img = await loadImage(src);
   const W = img.naturalWidth;
   const H = img.naturalHeight;
@@ -404,9 +418,11 @@ export async function analyzePhotoPrint(
   const fabric = (fit && hexToRgb(fit.fabric)) || dominantColor(sd, far);
   if (!fabric) return null;
 
-  // La prenda derecha, recortada.
-  const [gw, gh] = unrotatedSize(box[2] - box[0], box[3] - box[1], angle);
-  const k = Math.min(1, 360 / Math.max(gw, gh));
+  // La prenda derecha, recortada (con un poquito de margen, para no cortarle los bordes).
+  const [gw0, gh0] = unrotatedSize(box[2] - box[0], box[3] - box[1], angle);
+  const gw = gw0 * 1.06;
+  const gh = gh0 * 1.06;
+  const k = Math.min(1, maxSide / Math.max(gw, gh));
   const cw = Math.max(16, Math.round(gw * k));
   const ch = Math.max(16, Math.round(gh * k));
   const cut = document.createElement("canvas");
@@ -419,7 +435,22 @@ export async function analyzePhotoPrint(
   ctx.rotate((-angle * Math.PI) / 180);
   ctx.drawImage(small, -(box[0] + box[2]) / 2, -(box[1] + box[3]) / 2);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  const data = ctx.getImageData(0, 0, cw, ch);
+  return { cut, ctx, data: ctx.getImageData(0, 0, cw, ch), cw, ch, fabric, bg };
+}
+
+/**
+ * Mira la foto de una prenda estampada y devuelve su estampado: suelto (recortado, con su lugar
+ * sobre la prenda) o por toda la tela (un pedazo cuadrado de la tela). `body` es qué parte del ancho
+ * es el cuerpo de la prenda (en una remera, sin las mangas); `allover` fuerza el pedazo de tela.
+ */
+export async function analyzePhotoPrint(
+  src: string,
+  fit: GarmentFit | undefined,
+  opts: { body: number; allover?: boolean },
+): Promise<PhotoPrint | null> {
+  const g = await uprightGarment(src, fit);
+  if (!g) return null;
+  const { cut, ctx, data, cw, ch, fabric, bg } = g;
   const scan = scanPrint(data.data, cw, ch, fabric, bg);
   const kind = opts.allover ? "allover" : classifyScan(scan);
   if (kind === "none" || !scan.garmentBox) return null;
