@@ -4,7 +4,7 @@
 // prenda sale con su forma de verdad, no todas iguales.
 
 import { backgroundMask, uprightGarment } from "./print-decal";
-import type { TopMeasured } from "./look";
+import type { PantsMeasured, TopMeasured } from "./look";
 import type { GarmentFit } from "./types";
 
 export interface BottomMeasure {
@@ -15,6 +15,15 @@ export interface BottomMeasure {
   inseam: number;
   /** Ancho de cada pierna en el ruedo (promedio de las dos). */
   opening: number;
+  /** Ancho de cada pierna justo debajo de la entrepierna (el muslo) y a mitad de camino (la rodilla). */
+  thigh: number;
+  knee: number;
+}
+
+/** El valor del medio de una lista (0 si está vacía). */
+function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length ? s[Math.floor(s.length / 2)] : 0;
 }
 
 /** Tramos de prenda en una fila de la máscara (de dónde a dónde), sin los muy chiquitos. */
@@ -79,8 +88,25 @@ export function measureBottomMask(mask: Uint8Array, w: number, h: number): Botto
     if (legs) openings.push((legs[0][1] - legs[0][0] + legs[1][1] - legs[1][0]) / 2);
   }
   if (!openings.length) return null;
-  openings.sort((a, b) => a - b);
-  const m = { waist, rise: crotch - top, inseam: bottom - crotch, opening: openings[Math.floor(openings.length / 2)] };
+  // Ancho de una pierna a cierta altura de la entrepierna (0 = arriba, 1 = ruedo), con unas filas alrededor.
+  const legAt = (k: number) => {
+    const y0 = Math.round(crotch + (bottom - crotch) * k);
+    const ws: number[] = [];
+    for (let y = y0 - 2; y <= y0 + 2; y++) {
+      const legs = y > crotch && y < bottom ? twoLegs(y) : null;
+      if (legs) ws.push((legs[0][1] - legs[0][0] + legs[1][1] - legs[1][0]) / 2);
+    }
+    return median(ws);
+  };
+  const opening = median(openings);
+  const m = {
+    waist,
+    rise: crotch - top,
+    inseam: bottom - crotch,
+    opening,
+    thigh: legAt(0.06) || opening,
+    knee: legAt(0.45) || opening,
+  };
   // Lo que no tiene sentido (piernas más anchas que la cintura entera, sin tiro) se descarta.
   if (m.rise < waist * 0.15 || m.opening > waist * 1.05 || m.opening < waist * 0.2) return null;
   return m;
@@ -116,10 +142,6 @@ export interface TopMeasure {
   hem: number;
 }
 
-const median = (xs: number[]) => {
-  const s = [...xs].sort((a, b) => a - b);
-  return s.length ? s[Math.floor(s.length / 2)] : 0;
-};
 
 /**
  * Mide la silueta de una remera (o camisa, o chomba) estirada en la foto: de abajo hacia arriba el
@@ -208,7 +230,20 @@ async function garmentMask(src: string, fit: GarmentFit | undefined): Promise<{ 
   return { mask, w: g.cw, h: g.ch };
 }
 
-const cache = new Map<string, Promise<{ legT: number; hemR: number } | null>>();
+/** Proporciones de un pantalón (todo comparado con el ancho de la cintura), para el avatar. */
+export function pantsShapeFromMeasure(m: BottomMeasure): PantsMeasured {
+  const round = (x: number) => Math.round(x * 1000) / 1000;
+  return { thigh: round(m.thigh / m.waist), knee: round(m.knee / m.waist), opening: round(m.opening / m.waist), inseam: round(m.inseam / m.waist) };
+}
+
+/** Lo que se mide de una parte de abajo: cómo queda un short (largo y boca) y las proporciones de un pantalón. */
+export interface BottomShape {
+  legT: number;
+  hemR: number;
+  pants: PantsMeasured;
+}
+
+const cache = new Map<string, Promise<BottomShape | null>>();
 
 /** Huella corta de un texto largo (la foto en base64), para guardar la medida una vez por foto. */
 function hash(s: string): string {
@@ -221,7 +256,7 @@ function hash(s: string): string {
 }
 
 /** Mide la parte de abajo en su foto (una sola vez por foto y ajuste). */
-export function measureBottom(src: string, fit: GarmentFit | undefined): Promise<{ legT: number; hemR: number } | null> {
+export function measureBottom(src: string, fit: GarmentFit | undefined): Promise<BottomShape | null> {
   const key = `${hash(src)}|${JSON.stringify(fit ?? null)}`;
   let p = cache.get(key);
   if (!p) {
@@ -229,7 +264,7 @@ export function measureBottom(src: string, fit: GarmentFit | undefined): Promise
       const g = await garmentMask(src, fit);
       if (!g) return null;
       const m = measureBottomMask(g.mask, g.w, g.h);
-      return m ? bottomShapeFromMeasure(m) : null;
+      return m ? { ...bottomShapeFromMeasure(m), pants: pantsShapeFromMeasure(m) } : null;
     })().catch(() => null);
     cache.set(key, p);
   }

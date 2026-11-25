@@ -272,3 +272,33 @@ describe("remeras: cuello, ancho, largo y mangas", () => {
     expect(v.sleeveColor).toBe(v.color);
   });
 });
+
+describe("pantalones: corte, tiro y largo", () => {
+  const fit = (details: GarmentFit["details"]): Garment["fit"] => ({ front: { v: 6, angle: 0, box: [0, 0, 1, 1], fabric: "#202020", details } });
+  const b = (id: string, kind: string, details?: GarmentFit["details"]) =>
+    g({ id, category: "bottom", kind, color: "negro", fit: details ? fit(details) : undefined });
+  const ropa = [
+    b("palazzo", "palazzo"),
+    b("jogging", "jogging"),
+    b("calza", "calza"),
+    b("oxford", "oxford"),
+    b("chupin", "jean", { legShape: "chupin", rise: "alto" }),
+    b("tobillero", "chino", { legLength: "tobillo" }),
+    b("cargo", "cargo"),
+  ];
+  const look = (id: string) => lookFrom({ bottom: id }, ropa).bottom!;
+
+  it("cada tipo tiene su corte (y la IA decide en los que pueden ser de cualquiera)", () => {
+    expect(look("palazzo")).toMatchObject({ cut: "ancho", width: "muy-holgado" });
+    expect(look("jogging")).toMatchObject({ cut: "jogger", cuffs: true });
+    expect(look("calza").cut).toBe("calza");
+    expect(look("oxford").cut).toBe("oxford");
+    expect(look("chupin")).toMatchObject({ cut: "chupin", rise: "alto" });
+    expect(look("cargo")).toMatchObject({ cut: "recto", width: "holgado" });
+  });
+
+  it("el largo: tobillero o hasta el zapato", () => {
+    expect(look("tobillero").pantLength).toBe("tobillo");
+    expect(look("palazzo").pantLength).toBe("largo");
+  });
+});

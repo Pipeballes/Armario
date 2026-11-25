@@ -70,7 +70,7 @@ describe("parseFit", () => {
         print_width: 0.4,
       }),
     ).toEqual({
-      v: 5,
+      v: 6,
       angle: 25,
       box: [0.2, 0.1, 0.8, 0.9],
       fabric: "#f4f4f2",

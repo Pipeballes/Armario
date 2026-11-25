@@ -4,7 +4,8 @@
 // interior. Cada tipo con sus detalles: cintura con presillas y botón o elástica con cordón,
 // bragueta, bolsillos (de jean, en diagonal, en la costura del costado, cargo), franjas, raya del
 // pantalón, el logo y cómo termina la pierna (ruedo, botamanga doblada, deshilachado, elástico, tajo).
-// El largo y el ancho de cada short salen de su foto (o de lo que vio la IA) y de su talle.
+// El largo y el ancho de cada short salen de su foto (o de lo que vio la IA) y de su talle. Cada
+// pantalón tiene su corte (la tela cae derecha, no se pega a la rodilla), su tiro y su largo.
 
 import { useCallback, useMemo } from "react";
 import * as THREE from "three";
@@ -14,6 +15,8 @@ import {
   bottomLegAxis,
   bottomLegT,
   bottomThighProfile,
+  pantCalfT,
+  pantLeg,
   clothProfile,
   jointBalls,
   limbProfiles,
@@ -42,19 +45,14 @@ import {
 import { Skirt } from "./Tops";
 
 
-/** Hasta dónde baja la pierna del pantalón por la pantorrilla (0 = rodilla, 1 = tobillo; 0 si no llega). */
-export function pantCalfT(look: BottomLook): number {
-  if (look.kind === "bermuda") return 0.08;
-  if (look.kind === "pants") return look.cuffs ? 0.94 : 0.965;
-  return 0;
-}
+export { pantCalfT };
 
 /**
  * Si el pantalón va por encima de las botas: los sueltos sí; las calzas, los chupín y los jogging
  * (cerrados en el tobillo) van por adentro de la bota.
  */
 export function pantsOverBoots(look: BottomLook | null | undefined): boolean {
-  return Boolean(look && look.kind === "pants" && !look.tight && !look.cuffs);
+  return Boolean(look && look.kind === "pants" && !look.tight && !look.cuffs && look.cut !== "chupin");
 }
 
 /** Recorta un perfil (k de 0 a 1) entre k0 y k1 y lo vuelve a llevar de 0 a 1. */
@@ -146,7 +144,8 @@ function Hem({
       }
       case "elastico": {
         // Puño elástico: una banda fruncida (en el bóxer y la calza, el elástico finito de otro color).
-        const tA = t1 - dt(look.tight || look.kind !== "shorts" ? 0.012 : 0.02);
+        // El puño del jogging es alto (unos 4 cm); el del short, más bajo; el de la calza, finito.
+        const tA = t1 - dt(look.tight ? 0.012 : look.kind === "pants" ? 0.04 : look.kind === "shorts" ? 0.02 : 0.012);
         const color = look.tight ? look.trim : shade(look.color, -0.05);
         return {
           bands: [{ geo: band(tA, 0.0016), color }],
@@ -161,11 +160,12 @@ function Hem({
         // Ribete que sigue el borde y sube en el tajo del costado.
         return { bands: [], lines: [{ pts: ring(end ?? t1, 0.0012), r: 0.0026, color: look.trim }], fringe: null };
       default:
-        // Ruedo simple: el borde y la costura de arriba (pespunte).
+        // Ruedo simple: el borde y la costura de arriba (pespunte). En el jean el borde es de la misma
+        // tela (el hilo naranja va en la costura).
         return {
           bands: [],
           lines: [
-            { pts: ring(t1, 0.0012), r: look.tight ? 0.003 : 0.0042, color: look.trim },
+            { pts: ring(t1, 0.0012), r: look.tight ? 0.003 : 0.0042, color: jean ? shade(look.color, -0.04) : look.trim },
             { pts: ring(t1 - dt(0.014), 0.0011), r: 0.0007, color: stitch },
           ],
           fringe: null,
@@ -194,16 +194,18 @@ function Hem({
 /** Pierna del pantalón (la derecha). Sigue la forma de la pierna + holgura; los anchos se abren abajo. */
 function PantLeg({ sk, look, fill }: { sk: Skeleton; look: BottomLook; fill: Fill }) {
   const l = useMemo(() => sk.leg(1), [sk]);
-  // El eje de la tela del muslo (en un short ancho, corrido hacia afuera).
+  // El eje de la tela (en un short ancho o un palazzo, corrido hacia afuera).
   const axis = useMemo(() => bottomLegAxis(sk, look, 1), [sk, look]);
   const prof = useMemo(() => limbProfiles(sk), [sk]);
   const inf = bottomInflate(look);
   const thighT = bottomLegT(look);
   const calfT = pantCalfT(look);
-  const thigh = useMemo(() => bottomThighProfile(sk, look), [sk, look]);
+  // El pantalón tiene su corte (la tela cae derecha, no se pega a la rodilla); el short y la bermuda, el suyo.
+  const pant = useMemo(() => (look.kind === "pants" ? pantLeg(sk, look) : null), [sk, look]);
+  const thigh = useMemo(() => pant?.thigh ?? bottomThighProfile(sk, look), [pant, sk, look]);
   const notch = legNotch(sk, look);
   const thighEnd = useMemo(() => lerp3(axis.hip, axis.knee, thighT), [axis, thighT]);
-  const calfEnd = useMemo(() => lerp3(l.knee, l.ankle, calfT), [l, calfT]);
+  const calfEnd = useMemo(() => (pant ? lerp3(axis.knee, axis.ankle, calfT) : lerp3(l.knee, l.ankle, calfT)), [pant, axis, l, calfT]);
   // Con tajo, la pierna torneada llega hasta donde empieza el tajo y el resto es un tramo recortado.
   const upper = useMemo(() => {
     if (!notch) return axisLathe(axis.hip, thighEnd, thigh);
@@ -219,6 +221,7 @@ function PantLeg({ sk, look, fill }: { sk: Skeleton; look: BottomLook; fill: Fil
   const kneeExtra = thigh[thigh.length - 1][1] - (profileAt(prof.thigh, 1) + inf);
   const lowerProfile = useMemo(() => {
     if (calfT === 0) return null;
+    if (pant) return pant.calf;
     const base = clothProfile(prof.calf, inf, 0, calfT);
     const kneeR = base[0][1];
     // Todas las formas arrancan en la rodilla con el mismo ancho que termina el muslo (sin escalón).
@@ -229,14 +232,30 @@ function PantLeg({ sk, look, fill }: { sk: Skeleton; look: BottomLook; fill: Fil
       if (look.kind === "bermuda") return [t, r + Math.max(0, kneeExtra) + 0.008 * t];
       return [t, r];
     });
-  }, [calfT, prof, inf, look.wide, look.cuffs, look.tight, look.kind, sk.legR.ankle, kneeExtra]);
-  const lower = useMemo(() => (lowerProfile ? axisLathe(l.knee, calfEnd, lowerProfile) : null), [lowerProfile, l, calfEnd]);
+  }, [calfT, pant, prof, inf, look.wide, look.cuffs, look.tight, look.kind, sk.legR.ankle, kneeExtra]);
+  const kneeAt = pant ? axis.knee : l.knee;
+  const lower = useMemo(() => (lowerProfile ? axisLathe(kneeAt, calfEnd, lowerProfile) : null), [lowerProfile, kneeAt, calfEnd]);
   const lowerR = useCallback((t: number) => (lowerProfile ? profileAt(lowerProfile, t / calfT) : 0), [lowerProfile, calfT]);
   const j = useMemo(() => jointBalls(sk, inf), [sk, inf]);
+  // Bolas de la cadera y la rodilla del tamaño de la tela (en un pantalón suelto, más grandes que la pierna).
+  const hipR = Math.min(Math.max(j.hip.r, pant ? thigh[0][1] : 0), j.hip.r + 0.01);
+  const kneeR = pant ? Math.max(j.knee.r, thigh[thigh.length - 1][1]) : j.knee.r + Math.max(0, look.kind === "bermuda" ? kneeExtra : 0);
+  // Quiebre: el pantalón largo (no los ajustados ni los de puño) se arruga un poco al llegar al zapato.
+  const breakFolds = useMemo(() => {
+    if (!pant || !lowerProfile || calfT < 0.93 || look.cuffs || look.cut === "chupin" || look.cut === "calza") return [];
+    const f = limbFrame(axis.knee, axis.ankle);
+    return [0.86, 0.93].map((u, k) =>
+      Array.from({ length: 13 }, (_, i) => {
+        const th = -1.1 + (2.2 * i) / 12;
+        const t = (u + 0.012 * Math.sin(th * 3 + k)) * calfT;
+        return limbPoint(f, t, th, profileAt(lowerProfile, t / calfT) + 0.0012);
+      }),
+    );
+  }, [pant, lowerProfile, calfT, look.cuffs, look.cut, axis]);
   return (
     <group>
       <mesh position={j.hip.at} castShadow>
-        <sphereGeometry args={[j.hip.r, 24, 18]} />
+        <sphereGeometry args={[hipR, 24, 18]} />
         <Mat color={look.color} pattern={fill} repeat={REPEAT.ball} />
       </mesh>
       <Geo geo={upper}>
@@ -249,8 +268,8 @@ function PantLeg({ sk, look, fill }: { sk: Skeleton; look: BottomLook; fill: Fil
       )}
       {lower && (
         <>
-          <mesh position={j.knee.at} castShadow>
-            <sphereGeometry args={[j.knee.r + Math.max(0, look.kind === "bermuda" ? kneeExtra : 0), 24, 18]} />
+          <mesh position={pant ? axis.knee : j.knee.at} castShadow>
+            <sphereGeometry args={[kneeR, 24, 18]} />
             <Mat color={look.color} pattern={fill} repeat={REPEAT.ball} />
           </mesh>
           <Geo geo={lower}>
@@ -263,7 +282,23 @@ function PantLeg({ sk, look, fill }: { sk: Skeleton; look: BottomLook; fill: Fil
       {look.kind === "bermuda" && !look.cuffs && (
         <Hem a={l.knee} b={l.ankle} t1={calfT} R={lowerR} style={look.hem === "tajo" ? "simple" : look.hem} look={look} />
       )}
-      {look.cuffs && lower && <Cuff from={l.knee} to={calfEnd} r={profileAt(prof.calf, calfT) + 0.009} tube={0.01} color={look.trim} />}
+      {look.kind === "bermuda" && look.cuffs && lower && (
+        <Cuff from={l.knee} to={calfEnd} r={profileAt(prof.calf, calfT) + 0.009} tube={0.01} color={look.trim} />
+      )}
+      {/* Botamanga del pantalón: ruedo, puño elástico (jogging, babucha), doblada o deshilachada */}
+      {pant && lower && (
+        <Hem
+          a={axis.knee}
+          b={axis.ankle}
+          t1={calfT}
+          R={lowerR}
+          style={look.cuffs ? "elastico" : look.hem === "tajo" ? "simple" : look.hem}
+          look={look}
+        />
+      )}
+      {breakFolds.map((pts, i) => (
+        <Line key={i} points={pts} r={0.0012} color={shade(look.color, -0.045)} />
+      ))}
     </group>
   );
 }
@@ -272,17 +307,18 @@ function PantLeg({ sk, look, fill }: { sk: Skeleton; look: BottomLook; fill: Fil
 
 /** Cintura de jean o pantalón: pretina, presillas, botón y bragueta con su costura en J. */
 function BeltWaist({ shell, look }: { shell: Ring[]; look: BottomLook }) {
-  const y0 = 0.982;
-  const y1 = 1.02;
-  const band = useMemo(() => shellPatch(shell, y0, y1, () => [-Math.PI, Math.PI], 0.0014, 48, 2), [shell]);
+  // Todo se mide desde el borde de arriba (la cintura sube o baja según el tiro).
+  const y1 = shell[shell.length - 1].y;
+  const y0 = y1 - 0.038;
+  const band = useMemo(() => shellPatch(shell, y0, y1, () => [-Math.PI, Math.PI], 0.0014, 48, 2), [shell, y0, y1]);
   const loops = useMemo(
     () => [-2.55, -1.35, -0.55, 0.55, 1.35, 2.55, Math.PI].map((p) => shellPatch(shell, y0 - 0.004, y1 + 0.002, () => [p - 0.045, p + 0.045], 0.0028, 2, 2)),
-    [shell],
+    [shell, y0, y1],
   );
-  const seam = useMemo(() => Array.from({ length: 25 }, (_, i) => shellPoint(shell, y0, -Math.PI + (2 * Math.PI * i) / 24, 0.0022)), [shell]);
+  const seam = useMemo(() => Array.from({ length: 25 }, (_, i) => shellPoint(shell, y0, -Math.PI + (2 * Math.PI * i) / 24, 0.0022)), [shell, y0]);
   // Bragueta: el borde en el medio y la costura en J del lado izquierdo de quien lo usa.
   const fly = useMemo(() => {
-    const edge = [y0, 0.94, 0.905].map((y) => shellPoint(shell, y, 0, 0.0018));
+    const edge = [y0, y1 - 0.08, y1 - 0.115].map((y) => shellPoint(shell, y, 0, 0.0018));
     const j: THREE.Vector3[] = [];
     for (let i = 0; i <= 8; i++) {
       const t = i / 8;
@@ -291,7 +327,7 @@ function BeltWaist({ shell, look }: { shell: Ring[]; look: BottomLook }) {
       j.push(shellPoint(shell, y, phiAtX(shell, y, x), 0.0018));
     }
     return { edge, j };
-  }, [shell]);
+  }, [shell, y0, y1]);
   const metal = look.pockets === "jean" ? "#b0894f" : shade(look.color, -0.2);
   return (
     <>
@@ -300,7 +336,7 @@ function BeltWaist({ shell, look }: { shell: Ring[]; look: BottomLook }) {
         <Piece key={i} geo={g} color={shade(look.color, -0.05)} />
       ))}
       <Line points={seam} r={0.0009} color={look.trim} />
-      <Button at={shellPoint(shell, 1.002, 0, 0.003)} normal={shellNormal(shell, 1.002, 0)} r={0.0065} color={metal} />
+      <Button at={shellPoint(shell, y1 - 0.018, 0, 0.003)} normal={shellNormal(shell, y1 - 0.018, 0)} r={0.0065} color={metal} />
       {look.fly && (
         <>
           <Line points={fly.edge} r={0.0011} color={shade(look.color, -0.15)} />
@@ -313,20 +349,20 @@ function BeltWaist({ shell, look }: { shell: Ring[]; look: BottomLook }) {
 
 /** Cintura elástica: banda ancha con costuras y, si tiene, el cordón con sus puntas. */
 function ElasticWaist({ shell, look, cords }: { shell: Ring[]; look: BottomLook; cords: boolean }) {
-  const y0 = look.tight ? 0.975 : 0.968;
-  const y1 = 1.02;
-  const band = useMemo(() => shellPatch(shell, y0, y1, () => [-Math.PI, Math.PI], 0.0018, 48, 2), [shell, y0]);
+  const y1 = shell[shell.length - 1].y;
+  const y0 = y1 - (look.tight ? 0.045 : 0.052);
+  const band = useMemo(() => shellPatch(shell, y0, y1, () => [-Math.PI, Math.PI], 0.0018, 48, 2), [shell, y0, y1]);
   const strings = useMemo(
     () =>
       cords && look.drawstring
         ? [-1, 1].map((s) =>
             Array.from({ length: 6 }, (_, i) => {
-              const y = 1.0 - (0.075 * i) / 5;
+              const y = y1 - 0.02 - (0.075 * i) / 5;
               return shellPoint(shell, y, phiAtX(shell, y, s * (0.011 + 0.012 * (i / 5))), 0.0042);
             }),
           )
         : [],
-    [shell, cords, look.drawstring],
+    [shell, cords, look.drawstring, y1],
   );
   // El elástico de la ropa interior y las calzas suele ser de otro color; en el resto, el de la tela
   // (los detalles de color, como las franjas o el ribete, no van en la cintura).
@@ -360,6 +396,7 @@ function FrontPockets({ shell, look }: { shell: Ring[]; look: BottomLook }) {
   const jean = look.pockets === "jean";
   const side = look.pockets === "side";
   const parts = useMemo(() => {
+    const wt = shell[shell.length - 1].y;
     const openings: THREE.Vector3[][] = [];
     const lips: THREE.Vector3[][] = [];
     const facings: THREE.BufferGeometry[] = [];
@@ -370,10 +407,10 @@ function FrontPockets({ shell, look }: { shell: Ring[]; look: BottomLook }) {
       const curve = (t: number): [number, number] => {
         if (side) {
           // En la costura del costado: casi vertical, apenas hacia adelante arriba.
-          const y = 0.968 - 0.09 * t;
+          const y = wt - 0.052 - 0.09 * t;
           return [ringAt(shell, y).rx * (0.9 + 0.06 * t), y];
         }
-        const y = 0.982 - (jean ? 0.052 : 0.075) * t;
+        const y = wt - 0.038 - (jean ? 0.052 : 0.075) * t;
         const rx = ringAt(shell, y).rx;
         return [jean ? 0.062 + (rx * 0.9 - 0.062) * Math.sin((t * Math.PI) / 2) : 0.085 + (rx * 0.94 - 0.085) * t, y];
       };
@@ -419,10 +456,10 @@ function FrontPockets({ shell, look }: { shell: Ring[]; look: BottomLook }) {
       // Monedero, del lado derecho de quien lo usa (−x).
       extra.push(
         [
-          [-0.052, 0.978],
-          [-0.052, 0.952],
-          [-0.088, 0.952],
-          [-0.088, 0.978],
+          [-0.052, wt - 0.042],
+          [-0.052, wt - 0.068],
+          [-0.088, wt - 0.068],
+          [-0.088, wt - 0.042],
         ].map(([x, y]) => shellPoint(shell, y, phiAtX(shell, y, x), 0.0021)),
       );
     }
@@ -433,7 +470,7 @@ function FrontPockets({ shell, look }: { shell: Ring[]; look: BottomLook }) {
   return (
     <>
       {parts.facings.map((g, i) => (
-        <Piece key={i} geo={g} color={shade(look.color, -0.045)} />
+        <Piece key={i} geo={g} color={shade(look.color, -0.018)} />
       ))}
       {parts.openings.map((pts, i) => (
         <Line key={i} points={pts} r={0.0016} color={dark} />
@@ -454,30 +491,42 @@ function FrontPockets({ shell, look }: { shell: Ring[]; look: BottomLook }) {
 /** Bolsillos de atrás: parches con costura (jean) o una ranura con botón (pantalón, chino). */
 function BackPockets({ shell, look }: { shell: Ring[]; look: BottomLook }) {
   const jean = look.pockets === "jean";
+  // Desde la cintura: en el jean, debajo del canesú (la costura en V de atrás).
+  const wt = shell[shell.length - 1].y;
+  const top = wt - (jean ? 0.064 : 0.052);
+  const bot = top - 0.068;
   const parts = useMemo(
     () =>
       [-1, 1].map((s) => {
         const xa = s * 0.028;
         const xb = s * 0.102;
-        const patch = shellPatch(shell, 0.9, 0.968, (y) => {
+        const patch = shellPatch(shell, bot, top, (y) => {
           const a = phiAtX(shell, y, xa, true);
           const b = phiAtX(shell, y, xb, true);
           return [Math.min(a, b), Math.max(a, b)];
         }, 0.0016, 6, 6);
         const outline = [
-          [xa, 0.968],
-          [xa, 0.912],
-          [(xa + xb) / 2, 0.898],
-          [xb, 0.912],
-          [xb, 0.968],
+          [xa, top],
+          [xa, bot + 0.014],
+          [(xa + xb) / 2, bot],
+          [xb, bot + 0.014],
+          [xb, top],
         ].map(([x, y]) => shellPoint(shell, y, phiAtX(shell, y, x, true), 0.0024));
         const welt = [0, 1, 2, 3, 4].map((i) => {
           const x = xa + ((xb - xa) * i) / 4;
-          return shellPoint(shell, 0.955, phiAtX(shell, 0.955, x, true), 0.0019);
+          return shellPoint(shell, top - 0.013, phiAtX(shell, top - 0.013, x, true), 0.0019);
         });
-        return { patch, outline, welt, mid: (xa + xb) / 2 };
+        // Canesú del jean: la costura en V de atrás, más alta a los costados y más baja en el medio.
+        const yoke = [0, 0.004].map((dy) =>
+          Array.from({ length: 9 }, (_, i) => {
+            const phi = s * (Math.PI / 2 + (Math.PI / 2) * (i / 8));
+            const y = wt - 0.042 - 0.016 * (i / 8) - dy;
+            return shellPoint(shell, y, phi, 0.0019);
+          }),
+        );
+        return { patch, outline, welt, yoke, mid: (xa + xb) / 2 };
       }),
-    [shell],
+    [shell, top, bot, wt],
   );
   return (
     <>
@@ -486,13 +535,16 @@ function BackPockets({ shell, look }: { shell: Ring[]; look: BottomLook }) {
           <group key={i}>
             <Piece geo={p.patch} color={shade(look.color, -0.03)} />
             <Line points={p.outline} r={0.0009} color={look.trim} />
+            {p.yoke.map((pts, k) => (
+              <Line key={k} points={pts} r={0.0007} color={look.trim} />
+            ))}
           </group>
         ) : (
           <group key={i}>
             <Line points={p.welt} r={0.0013} color={shade(look.color, -0.18)} />
             <Button
-              at={shellPoint(shell, 0.944, phiAtX(shell, 0.944, p.mid, true), 0.003)}
-              normal={shellNormal(shell, 0.944, phiAtX(shell, 0.944, p.mid, true))}
+              at={shellPoint(shell, top - 0.024, phiAtX(shell, top - 0.024, p.mid, true), 0.003)}
+              normal={shellNormal(shell, top - 0.024, phiAtX(shell, top - 0.024, p.mid, true))}
               r={0.0042}
               color={shade(look.color, -0.2)}
             />
@@ -511,7 +563,8 @@ function BackPockets({ shell, look }: { shell: Ring[]; look: BottomLook }) {
  */
 function LegDetails({ sk, look }: { sk: Skeleton; look: BottomLook }) {
   const prof = useMemo(() => limbProfiles(sk), [sk]);
-  const thigh = useMemo(() => bottomThighProfile(sk, look), [sk, look]);
+  const pant = useMemo(() => (look.kind === "pants" ? pantLeg(sk, look) : null), [sk, look]);
+  const thigh = useMemo(() => pant?.thigh ?? bottomThighProfile(sk, look), [pant, sk, look]);
   const tEnd = bottomLegT(look);
   const calfT = pantCalfT(look);
   const inf = bottomInflate(look);
@@ -520,20 +573,34 @@ function LegDetails({ sk, look }: { sk: Skeleton; look: BottomLook }) {
     const lines: { pts: THREE.Vector3[]; color: string; r: number }[] = [];
     const buttons: { at: THREE.Vector3; n: THREE.Vector3 }[] = [];
     const thighR = (t: number) => profileAt(thigh, t / tEnd) + 0.0016;
+    const calfProfile = pant?.calf ?? clothProfile(prof.calf, inf, 0, Math.max(0.01, calfT));
+    const calfR = (t: number) => profileAt(calfProfile, t / calfT) + 0.0016;
+    const notch = legNotch(sk, look);
     for (const s of [1, -1] as const) {
       const l = sk.leg(s);
       const ax = bottomLegAxis(sk, look, s);
       const fThigh = limbFrame(ax.hip, ax.knee);
+      const fCalf = pant ? limbFrame(ax.knee, ax.ankle) : limbFrame(l.knee, l.ankle);
       const out90 = s * (Math.PI / 2);
       if (look.sideStripes) {
         const w = 0.016;
-        const stripeEnd = (tEnd - legNotch(sk, look)) * 0.995;
+        const stripeEnd = (tEnd - notch) * 0.995;
         out.push({ geo: limbPatch(fThigh, 0, stripeEnd, out90 - w / 0.08, out90 + w / 0.08, thighR, 3, 14), color: look.trim });
         if (calfT > 0) {
-          const fCalf = limbFrame(l.knee, l.ankle);
-          const calfR = (t: number) => profileAt(clothProfile(prof.calf, inf, 0, calfT), t / calfT) + 0.0016;
           out.push({ geo: limbPatch(fCalf, 0, calfT * 0.99, out90 - w / 0.06, out90 + w / 0.06, calfR, 3, 14), color: look.trim });
         }
+      } else if (!look.tight) {
+        // Costura del costado, de la cadera al ruedo (en el jean, con el hilo naranja).
+        const seam = look.pockets === "jean" ? look.trim : shade(look.color, -0.07);
+        const tTop = (tEnd - notch) * 0.98;
+        const pts = Array.from({ length: 9 }, (_, i) => limbPoint(fThigh, 0.03 + ((tTop - 0.03) * i) / 8, out90, thighR(0.03 + ((tTop - 0.03) * i) / 8) - 0.0004));
+        if (calfT > 0) {
+          for (let i = 1; i <= 8; i++) {
+            const t = (calfT * 0.97 * i) / 8;
+            pts.push(limbPoint(fCalf, t, out90, calfR(t) - 0.0004));
+          }
+        }
+        lines.push({ pts, color: seam, r: 0.0007 });
       }
       if (look.pockets === "cargo" && tEnd >= 0.35) {
         // Bolsillo cargo al costado del muslo, siempre dentro del largo de la prenda (en un short
@@ -573,19 +640,12 @@ function LegDetails({ sk, look }: { sk: Skeleton; look: BottomLook }) {
       }
       if (look.crease) {
         const pts = [0.06, 0.3, 0.6, 0.98].map((t) => limbPoint(fThigh, t, 0, thighR(t) + 0.0004));
-        if (calfT > 0) {
-          const fCalf = limbFrame(l.knee, l.ankle);
-          const calf = clothProfile(prof.calf, inf, 0, calfT);
-          for (const t of [0.15, 0.5, 0.92]) {
-            const r = Math.max(profileAt(calf, t / calfT), sk.legR.knee + inf) + 0.002;
-            pts.push(limbPoint(fCalf, t * calfT, 0, Math.max(r, sk.legR.ankle + 0.026)));
-          }
-        }
+        if (calfT > 0) for (const u of [0.15, 0.5, 0.92]) pts.push(limbPoint(fCalf, u * calfT, 0, calfR(u * calfT) + 0.0004));
         lines.push({ pts, color: shade(look.color, 0.06), r: 0.0009 });
       }
     }
     return { out, lines, buttons };
-  }, [sk, look, thigh, tEnd, calfT, prof, inf]);
+  }, [sk, look, pant, thigh, tEnd, calfT, prof, inf]);
   return (
     <>
       {items.out.map((p, i) => (

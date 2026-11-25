@@ -130,3 +130,13 @@ describe("medidas de una remera desde la foto", () => {
     expect(measureTopMask(mask, w, w)).toBeNull();
   });
 });
+
+describe("medidas de un pantalón desde la foto", () => {
+  it("mide el muslo y la rodilla, además de la boca", () => {
+    // Un pantalón recto: la pierna arranca ancha y se angosta hasta la boca.
+    const s = shorts(100, 50, 130, 30);
+    const m = measureBottomMask(s.mask, s.w, s.h)!;
+    expect(m.thigh).toBeGreaterThan(m.knee);
+    expect(m.knee).toBeGreaterThan(m.opening - 2);
+  });
+});

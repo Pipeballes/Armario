@@ -105,6 +105,20 @@ export interface BottomLook {
   cuffs: boolean;
   /** Pierna ancha (palazzo, oxford). */
   wide: boolean;
+  /**
+   * Corte de la pierna del pantalón: chupín (se angosta hasta el tobillo), slim, recto, ancho
+   * (amplio desde la cadera), oxford (se abre desde la rodilla), jogger (con puño), babucha (muy
+   * suelto, con puño) o calza (pegada).
+   */
+  cut: PantCut;
+  /** Qué tan ancho es (lo que vio la IA): suma o resta holgura a la pierna del pantalón. */
+  width: "ajustado" | "regular" | "holgado" | "muy-holgado";
+  /** Tiro: hasta dónde sube la cintura. */
+  rise: "alto" | "medio" | "bajo";
+  /** Largo del pantalón: hasta el zapato, tobillero (se ve el tobillo) o capri (a media pantorrilla). */
+  pantLength: "largo" | "tobillo" | "capri";
+  /** Proporciones del pantalón medidas en su foto (si se pudieron medir). */
+  pantsMeasured?: PantsMeasured;
   /** Pegado al cuerpo (calza). */
   tight: boolean;
   /** Cintura con presillas y botón (jean, chino), elástica (jogging, deportivo) o lisa. */
@@ -128,6 +142,20 @@ export interface BottomLook {
   /** La foto de adelante, para medir el largo y el ancho de verdad. */
   source?: { src: string; fit?: GarmentFit };
   print?: PrintRef;
+}
+
+export type PantCut = "chupin" | "slim" | "recto" | "ancho" | "oxford" | "jogger" | "babucha" | "calza";
+
+/** Anchos (aplanados) del pantalón en su foto, comparados con el ancho de la cintura. */
+export interface PantsMeasured {
+  /** El muslo, justo debajo de la entrepierna. */
+  thigh: number;
+  /** La rodilla (a mitad de la entrepierna). */
+  knee: number;
+  /** La boca de la pierna. */
+  opening: number;
+  /** El largo de la entrepierna. */
+  inseam: number;
 }
 
 export interface ShoesLook {
@@ -433,7 +461,7 @@ function bottomLook(g: Garment, gender?: string | null): BottomLook {
           ? "shorts"
           : "pants";
   if (kind === "shorts" && d.legLength === "rodilla") kind = "bermuda";
-  if (kind === "shorts" && d.legLength === "largo") kind = "pants";
+  if (kind === "shorts" && (d.legLength === "largo" || d.legLength === "tobillo" || d.legLength === "capri")) kind = "pants";
   const elasticKind =
     ["jogging", "calza", "calza-corta", "babucha", "pantalon-lino", "calza-pijama"].includes(k) ||
     pijama ||
@@ -461,6 +489,17 @@ function bottomLook(g: Garment, gender?: string | null): BottomLook {
             : kind === "pants" && waist === "elastic" && !tight
               ? "side"
               : "none";
+  // Corte del pantalón: algunos tipos ya lo dicen (la calza, el palazzo, el oxford, la babucha); en
+  // el resto manda lo que vio la IA, o el de siempre para ese tipo.
+  const cut: PantCut = tight
+    ? "calza"
+    : k === "palazzo" || k === "pantalon-lino"
+      ? d.legShape === "recto" || d.legShape === "ancho" ? d.legShape : "ancho"
+      : k === "oxford"
+        ? "oxford"
+        : k === "babucha"
+          ? "babucha"
+          : (d.legShape ?? (k === "jogging" || (kind === "pants" && sport && waist === "elastic") ? "jogger" : "recto"));
   const legT =
     kind !== "shorts"
       ? 1
@@ -483,8 +522,13 @@ function bottomLook(g: Garment, gender?: string | null): BottomLook {
     kind,
     length: k === "pollera-larga" ? "long" : k === "pollera-midi" ? "midi" : "mini",
     legT,
-    cuffs: k === "jogging" || k === "babucha",
-    wide: k === "palazzo" || k === "oxford" || k === "babucha" || k === "pantalon-lino",
+    cuffs: cut === "jogger" || cut === "babucha" || (kind === "pants" && d.hem === "elastico"),
+    wide: cut === "ancho" || cut === "oxford" || cut === "babucha",
+    cut,
+    // El cargo y el pantalón de pijama son sueltos; el palazzo, muy suelto.
+    width: d.width ?? (k === "cargo" || pijama ? "holgado" : k === "palazzo" ? "muy-holgado" : "regular"),
+    rise: d.rise ?? "medio",
+    pantLength: d.legLength === "tobillo" ? "tobillo" : d.legLength === "capri" ? "capri" : "largo",
     tight,
     waist,
     drawstring: waist === "elastic" && !tight && !boxer && (Boolean(d.drawstring) || k === "jogging" || swimShort || sport || pijama),
@@ -708,6 +752,10 @@ export const DEFAULT_BOTTOM: BottomLook = {
   legWidth: 0.013,
   hem: "simple",
   ease: 0,
+  cut: "recto",
+  width: "regular",
+  rise: "medio",
+  pantLength: "largo",
 };
 
 /** Lo que el avatar tiene puesto arriba y abajo (con un vestido no lleva nada abajo). */

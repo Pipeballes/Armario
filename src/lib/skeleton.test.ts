@@ -360,3 +360,34 @@ describe("forma de la remera", () => {
     expect(topShape(sk, long).flare).toBeGreaterThan(topShape(sk, regular).flare);
   });
 });
+
+describe("pierna del pantalón", () => {
+  it("cada corte con su forma, y nunca más finito que la pierna", async () => {
+    const { pantLeg, pantCalfT, waistTop, limbProfiles, profileAt } = await import("./skeleton");
+    const sk = buildSkeleton(dims({ gender: "mujer" }));
+    const prof = limbProfiles(sk);
+    const leg = (p: Partial<BottomLook>) => pantLeg(sk, { ...pants(), ...p });
+    const knee = (p: Partial<BottomLook>) => leg(p).calf[0][1];
+    const hem = (p: Partial<BottomLook>) => leg(p).calf[leg(p).calf.length - 1][1];
+    // Ancho > recto > chupín en la rodilla; el oxford se abre abajo; el jogging se cierra en el puño.
+    expect(knee({ cut: "ancho" })).toBeGreaterThan(knee({ cut: "recto" }));
+    expect(knee({ cut: "recto" })).toBeGreaterThan(knee({ cut: "chupin" }));
+    expect(hem({ cut: "oxford" })).toBeGreaterThan(knee({ cut: "oxford" }) + 0.02);
+    expect(hem({ cut: "jogger", cuffs: true })).toBeLessThan(knee({ cut: "jogger", cuffs: true }) - 0.02);
+    // El ancho se corre hacia afuera; el recto no.
+    expect(leg({ cut: "ancho", width: "muy-holgado" }).kneeShift).toBeGreaterThan(0);
+    expect(leg({ cut: "recto" }).kneeShift).toBe(0);
+    for (const cut of ["chupin", "slim", "recto", "ancho", "oxford", "jogger", "babucha"] as const) {
+      const p = leg({ cut, cuffs: cut === "jogger" || cut === "babucha" });
+      for (const [k, r] of p.thigh) expect(r).toBeGreaterThan(profileAt(prof.thigh, k) + 0.003);
+      for (const [u, r] of p.calf) expect(r).toBeGreaterThan(profileAt(prof.calf, u * p.calfT) + 0.003);
+    }
+    // Largo: tobillero y capri más cortos; medido en la foto, el de la foto.
+    expect(pantCalfT({ ...pants(), pantLength: "tobillo" })).toBeLessThan(pantCalfT(pants()));
+    expect(pantCalfT({ ...pants(), pantLength: "capri" })).toBeLessThan(pantCalfT({ ...pants(), pantLength: "tobillo" }));
+    expect(pantCalfT({ ...pants(), pantsMeasured: { thigh: 0.7, knee: 0.5, opening: 0.45, inseam: 1.6 } })).toBeLessThan(0.85);
+    // Tiro alto, medio y bajo.
+    expect(waistTop({ kind: "pants", rise: "alto" })).toBeGreaterThan(waistTop({ kind: "pants", rise: "medio" }));
+    expect(waistTop({ kind: "pants", rise: "bajo" })).toBeLessThan(waistTop({ kind: "pants", rise: "medio" }));
+  });
+});

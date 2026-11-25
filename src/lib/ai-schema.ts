@@ -291,7 +291,9 @@ Y los detalles, para dibujarla como es (si algo no se ve en la foto, poné lo qu
 - elastic_waist: true si la cintura es elastizada.
 - side_stripes: true si tiene franjas a los costados, de arriba abajo.
 - pockets: "ninguno", "pecho" (bolsillo en el pecho), "canguro", "jean" (bolsillos de jean), "cargo" (bolsillos grandes a los costados de las piernas) o "parche" (bolsillos cosidos por fuera).
-- leg_length: solo en partes de abajo: "micro" (muy corto), "muslo" (a mitad del muslo), "rodilla" o "largo". Si no es una parte de abajo, "".
+- leg_length: solo en partes de abajo: "micro" (muy corto), "muslo" (a mitad del muslo), "rodilla", "capri" (a media pantorrilla), "tobillo" (pantalón que deja ver el tobillo) o "largo". Si no es una parte de abajo, "".
+- leg_shape: solo en pantalones: "chupin" (pegado, se angosta hasta el tobillo), "slim" (angosto), "recto", "ancho" (amplio desde la cadera, como un palazzo), "oxford" (ajustado arriba y se abre desde la rodilla), "jogger" (con puño elástico en el tobillo) o "babucha" (muy suelto, con tiro bajo y puño). Si no es un pantalón, "".
+- rise: solo en partes de abajo: "alto" (la cintura llega al ombligo), "medio" o "bajo" (a la cadera). Si no es una parte de abajo, "".
 - sleeves: solo en partes de arriba y abrigos: "sin", "cortas" o "largas". Si no tiene mangas que mirar, "".
 - strap: solo en calzado abierto: "dedo" (ojota con la tira entre los dedos), "ancha" (una tira ancha sobre el pie) o "tiras" (sandalia con varias tiras). Si no, "".
 - width: qué tan ancha es: "ajustado" (pegado al cuerpo), "regular", "holgado" o "muy-holgado" (como un short de básquet). En un short o pantalón, mirá la boca de la pierna comparada con la cintura. En una remera o buzo: "holgado" si es oversize (hombros caídos, mangas que llegan casi al codo, cuerpo cuadrado), "muy-holgado" si es enorme, "ajustado" si es entallada.
@@ -332,7 +334,9 @@ export const FIT_SCHEMA = {
     elastic_waist: { type: "BOOLEAN" },
     side_stripes: { type: "BOOLEAN" },
     pockets: { type: "STRING", enum: ["ninguno", "pecho", "canguro", "jean", "cargo", "parche"] },
-    leg_length: { type: "STRING", enum: ["", "micro", "muslo", "rodilla", "largo"] },
+    leg_length: { type: "STRING", enum: ["", "micro", "muslo", "rodilla", "capri", "tobillo", "largo"] },
+    leg_shape: { type: "STRING", enum: ["", "chupin", "slim", "recto", "ancho", "oxford", "jogger", "babucha"] },
+    rise: { type: "STRING", enum: ["", "alto", "medio", "bajo"] },
     sleeves: { type: "STRING", enum: ["", "sin", "cortas", "largas"] },
     strap: { type: "STRING", enum: ["", "dedo", "ancha", "tiras"] },
     width: { type: "STRING", enum: ["ajustado", "regular", "holgado", "muy-holgado"] },
@@ -388,8 +392,12 @@ export function parseDetails(r: Record<string, unknown>): import("./types").Garm
   if (r.side_stripes === true) d.sideStripes = true;
   const pockets = oneOf(r.pockets, ["pecho", "canguro", "jean", "cargo", "parche"] as const);
   if (pockets) d.pockets = pockets;
-  const leg = oneOf(r.leg_length, ["micro", "muslo", "rodilla", "largo"] as const);
+  const leg = oneOf(r.leg_length, ["micro", "muslo", "rodilla", "capri", "tobillo", "largo"] as const);
   if (leg) d.legLength = leg;
+  const legShape = oneOf(r.leg_shape, ["chupin", "slim", "recto", "ancho", "oxford", "jogger", "babucha"] as const);
+  if (legShape) d.legShape = legShape;
+  const rise = oneOf(r.rise, ["alto", "medio", "bajo"] as const);
+  if (rise && rise !== "medio") d.rise = rise;
   const sleeves = oneOf(r.sleeves, ["sin", "cortas", "largas"] as const);
   if (sleeves) d.sleeves = sleeves;
   const strap = oneOf(r.strap, ["dedo", "ancha", "tiras"] as const);

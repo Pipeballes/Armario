@@ -98,8 +98,12 @@ export interface GarmentDetails {
   /** Franjas a los costados, de arriba abajo. */
   sideStripes?: boolean;
   pockets?: "pecho" | "canguro" | "jean" | "cargo" | "parche";
-  /** Largo de la pierna (partes de abajo). */
-  legLength?: "micro" | "muslo" | "rodilla" | "largo";
+  /** Largo de la pierna (partes de abajo): de short (micro, muslo, rodilla) o de pantalón (capri, tobillo, largo). */
+  legLength?: "micro" | "muslo" | "rodilla" | "capri" | "tobillo" | "largo";
+  /** Corte de la pierna de un pantalón. */
+  legShape?: "chupin" | "slim" | "recto" | "ancho" | "oxford" | "jogger" | "babucha";
+  /** Tiro: hasta dónde sube la cintura (alto = al ombligo, bajo = a la cadera). */
+  rise?: "alto" | "medio" | "bajo";
   /** Largo de las mangas (partes de arriba y abrigos). */
   sleeves?: "sin" | "cortas" | "largas";
   /** Tira del calzado abierto: entre los dedos (ojota), una ancha (chancla) o varias (sandalia). */
@@ -139,13 +143,16 @@ export interface GarmentFit {
 }
 
 /** Versión actual del ajuste de fotos. */
-export const FIT_VERSION = 5;
+export const FIT_VERSION = 6;
 /**
- * Versión que necesita cada prenda: la 5 sumó detalles de las partes de arriba (cuello, largo,
- * color de mangas), así que solo esas se vuelven a mirar; el resto sigue bien con la 4.
+ * Versión que necesita cada prenda, para no volver a mirar con la IA lo que ya está bien: la 5
+ * sumó detalles de las partes de arriba (cuello, largo, color de mangas) y la 6, de los pantalones
+ * (corte, tiro, largo tobillero o capri).
  */
 export function fitVersionFor(category: string): number {
-  return category === "top" || category === "dress" || category === "pijama" ? FIT_VERSION : 4;
+  if (category === "bottom" || category === "pijama") return 6;
+  if (category === "top" || category === "dress") return 5;
+  return 4;
 }
 
 export type HairId =

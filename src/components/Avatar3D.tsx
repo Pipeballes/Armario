@@ -11,13 +11,12 @@ import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { cameraFor, type BodyDims, type View } from "@/lib/avatar";
 import { analyzePhotoPrint } from "@/lib/print-decal";
-import { measureBottom, measureTop } from "@/lib/photo-shape";
+import { measureBottom, measureTop, type BottomShape } from "@/lib/photo-shape";
 import { wornBottom, wornTop, type BottomLook, type Look, type TopLook, type TopMeasured } from "@/lib/look";
 import {
   armRoom,
   bottomInflate,
-  bottomLegExtra,
-  bottomLegShift,
+  bottomLegReach,
   bottomShell,
   buildSkeleton,
   layerOver,
@@ -60,8 +59,10 @@ function useMeasuredBottom(bottom: BottomLook | null): BottomLook | null {
   const src = bottom?.source?.src;
   const fit = bottom?.source?.fit;
   // Solo los que tienen pierna suelta (en los pegados, como la calza o el bóxer, manda el cuerpo).
-  const measurable = Boolean(bottom && src && (bottom.kind === "shorts" || bottom.kind === "bermuda") && !bottom.tight && bottom.legWidth > 0.004);
-  const [shape, setShape] = useState<{ src: string; legT: number; hemR: number } | null>(null);
+  const short = Boolean(bottom && (bottom.kind === "shorts" || bottom.kind === "bermuda") && bottom.legWidth > 0.004);
+  const pants = bottom?.kind === "pants";
+  const measurable = Boolean(bottom && src && !bottom.tight && (short || pants));
+  const [shape, setShape] = useState<({ src: string } & BottomShape) | null>(null);
   useEffect(() => {
     if (!measurable || !src) return;
     let alive = true;
@@ -74,6 +75,8 @@ function useMeasuredBottom(bottom: BottomLook | null): BottomLook | null {
   }, [measurable, src, fit]);
   return useMemo(() => {
     if (!bottom || !measurable || !shape || shape.src !== src) return bottom;
+    // Pantalón: sus anchos (muslo, rodilla, boca) y su largo de verdad.
+    if (bottom.kind === "pants") return { ...bottom, pantsMeasured: shape.pants };
     if (bottom.kind === "bermuda") return shape.legT < 0.7 ? { ...bottom, kind: "shorts", legT: shape.legT, hemR: shape.hemR } : bottom;
     if (shape.legT >= 0.92) return { ...bottom, kind: "bermuda" };
     return { ...bottom, legT: shape.legT, hemR: shape.hemR };
@@ -144,11 +147,16 @@ function Avatar({ dims, skin, look, style }: { dims: BodyDims; skin: string; loo
   // cinturón, la remera va metida: ahí el pantalón la envuelve a ella.
   const layers = useMemo(() => {
     const legged = bottom && bottom.kind !== "skirt" && bottom.kind !== "brief";
-    // Lo ancho de las piernas del short (y lo que se corren hacia afuera), para que lo de arriba las tape.
-    const extra = legged ? bottomLegExtra(sk, bottom) : null;
-    const shift = legged ? bottomLegShift(sk, bottom) : null;
-    const legs = legsEnvelope(sk, legged ? bottomInflate(bottom) : 0, 0.45, 0.99, extra && shift ? (t) => extra(t) + shift(t) : undefined);
+    // Lo ancho de las piernas (y lo que se corren hacia afuera, en un short ancho o un palazzo), para
+    // que lo de arriba (una remera, un tapado) las tape.
+    const reach = legged ? bottomLegReach(sk, bottom) : null;
+    const legs = legsEnvelope(sk, legged ? bottomInflate(bottom) : 0, 0.45, 0.99, reach?.thigh, reach?.calf);
     let below = bottom ? bottomShell(sk, bottom) : null;
+    // Un pantalón muy suelto arriba (babucha, palazzo) también es más ancho de cadera: el cuerpo del
+    // pantalón envuelve el arranque de las piernas.
+    if (below && bottom && reach && bottom.kind === "pants" && reach.thigh(0) > 0.008) {
+      below = layerOver(below, [legsEnvelope(sk, bottomInflate(bottom), sk.crotchY - 0.03, 0.97, reach.thigh, reach.calf)], 0.002);
+    }
     let topRings: Ring[];
     if (top.tucked && below) {
       topRings = topShell(sk, top, []);
@@ -157,7 +165,14 @@ function Avatar({ dims, skin, look, style }: { dims: BodyDims; skin: string; loo
       topRings = topShell(sk, top, below ? [below, legs] : [legs]);
     }
     const dress = top.dress !== "none" ? skirtRings(sk.torso, 0.98, top.dress) : null;
-    const waistGear = below && (acc?.kind === "belt" || acc?.kind === "waistbag") ? bandAround(below, 0.975, 1.025, 0.012) : null;
+    // El cinturón (o la riñonera) va a la altura de la cintura del pantalón (según su tiro).
+    const wt = below ? below[below.length - 1].y : 1.02;
+    const waistGear =
+      below && acc?.kind === "belt"
+        ? bandAround(below, wt - 0.045, wt + 0.005, 0.012)
+        : below && acc?.kind === "waistbag"
+          ? bandAround(below, 0.975, 1.025, 0.012)
+          : null;
     const outerRings = outer
       ? outerShell(
           sk,
@@ -167,6 +182,16 @@ function Avatar({ dims, skin, look, style }: { dims: BodyDims; skin: string; loo
       : null;
     return { topRings, below, outerRings };
   }, [sk, top, bottom, outer, acc]);
+
+  // Pantalón adentro de la bota (calza, chupín, jogging): la caña lo envuelve.
+  const bootAround = useMemo(() => {
+    if (!bottom || bottom.kind !== "pants" || pantsOverBoots(bottom)) return undefined;
+    const prof = limbProfiles(sk);
+    const inf = bottomInflate(bottom);
+    const reach = bottomLegReach(sk, bottom);
+    const calfT = pantCalfT(bottom);
+    return (t: number) => (t > calfT ? 0 : profileAt(prof.calf, t) + inf + reach.calf(t));
+  }, [sk, bottom]);
 
   // Dónde se apoyan los accesorios: sobre lo de más afuera.
   const accCtx = useMemo((): AccessoryContext => {
@@ -230,7 +255,12 @@ function Avatar({ dims, skin, look, style }: { dims: BodyDims; skin: string; loo
                   <Shoe look={shoes} skin={skin} />
                 </group>
                 {(shoes.kind === "boot" || shoes.kind === "tallboot") && (
-                  <BootShaft sk={sk} look={shoes} underHem={bottom && pantsOverBoots(bottom) ? pantCalfT(bottom) : undefined} />
+                  <BootShaft
+                    sk={sk}
+                    look={shoes}
+                    underHem={bottom && pantsOverBoots(bottom) ? pantCalfT(bottom) : undefined}
+                    around={bootAround}
+                  />
                 )}
               </group>
             );

@@ -409,7 +409,18 @@ export function Shoe({ look, skin }: { look: ShoesLook; skin: string }) {
  * Caña de la bota (la derecha). Va sobre el eje real de la pantorrilla —no sobre el pie— y sigue su
  * forma con holgura, así nunca la atraviesa, aunque la pierna esté un poco inclinada.
  */
-export function BootShaft({ sk, look, underHem }: { sk: Skeleton; look: ShoesLook; underHem?: number }) {
+export function BootShaft({
+  sk,
+  look,
+  underHem,
+  around,
+}: {
+  sk: Skeleton;
+  look: ShoesLook;
+  underHem?: number;
+  /** Si el pantalón va adentro de la bota: su radio en cada punto (t de rodilla a tobillo), para envolverlo. */
+  around?: (t: number) => number;
+}) {
   const tall = look.kind === "tallboot";
   const l = useMemo(() => sk.leg(1), [sk]);
   const prof = useMemo(() => limbProfiles(sk), [sk]);
@@ -430,12 +441,12 @@ export function BootShaft({ sk, look, underHem }: { sk: Skeleton; look: ShoesLoo
       const sN = i / n;
       const p = bottom.clone().lerp(topV, sN);
       const t = Math.min(1, Math.max(0, p.clone().sub(k).dot(leg) / leg.lengthSq()));
-      profile.push([sN, profileAt(prof.calf, t) + room + 0.012 * (1 - sN) ** 3]);
+      profile.push([sN, Math.max(profileAt(prof.calf, t) + room + 0.012 * (1 - sN) ** 3, around ? around(t) + 0.004 : 0)]);
     }
     const b: V3 = [bottom.x, bottom.y, bottom.z];
     const tp: V3 = [topV.x, topV.y, topV.z];
     return { geo: axisLathe(b, tp, profile), top: tp, topR: profile[n][1] };
-  }, [l, prof, tTop, room]);
+  }, [l, prof, tTop, room, around]);
   return (
     <group>
       <Geo geo={geo}>

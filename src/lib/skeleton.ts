@@ -3,7 +3,7 @@
 // Es lógica pura (sin three.js) para poder probarla.
 
 import type { BodyDims } from "./avatar";
-import { wornBottom, wornTop, type BottomLook, type Look, type OuterLook, type TopLook } from "./look";
+import { wornBottom, wornTop, type BottomLook, type Look, type OuterLook, type PantCut, type TopLook } from "./look";
 
 export type V3 = [number, number, number];
 
@@ -287,11 +287,20 @@ export function bottomLegShift(sk: Skeleton, look: BottomLook): (t: number) => n
   return (t) => s * Math.max(0, t);
 }
 
-/** Cadera y rodilla del eje de la pierna del short (del lado `side`), ya corrido hacia afuera si es ancho. */
-export function bottomLegAxis(sk: Skeleton, look: BottomLook, side: 1 | -1): { hip: V3; knee: V3 } {
+/**
+ * Cadera, rodilla y tobillo del eje de la pierna de la prenda (del lado `side`), ya corrido hacia
+ * afuera si es ancha (un short ancho, un palazzo).
+ */
+export function bottomLegAxis(sk: Skeleton, look: BottomLook, side: 1 | -1): { hip: V3; knee: V3; ankle: V3 } {
   const l = sk.leg(side);
-  const s = bottomLegShift(sk, look)(1);
-  return { hip: l.hip, knee: [l.knee[0] + side * s, l.knee[1], l.knee[2]] };
+  let ks = 0;
+  let as = 0;
+  if (look.kind === "pants") {
+    const p = pantLeg(sk, look);
+    ks = p.kneeShift;
+    as = p.ankleShift;
+  } else ks = bottomLegShift(sk, look)(1);
+  return { hip: l.hip, knee: [l.knee[0] + side * ks, l.knee[1], l.knee[2]], ankle: [l.ankle[0] + side * as, l.ankle[1], l.ankle[2]] };
 }
 
 /** Perfil de la tela del muslo de una parte de abajo (t de 0 a 1 sobre el tramo que cubre). */
@@ -424,7 +433,14 @@ export function layerOver(rings: Ring[], under: Ring[][], gap = 0.005): Ring[] {
  * alturas, con cierta holgura de tela. Sirve para que una remera o un abrigo que cuelgan sobre los
  * muslos los tapen: el muslo sale un poco hacia adelante del torso.
  */
-export function legsEnvelope(sk: Skeleton, inflate: number, from: number, to: number, extra: (t: number) => number = () => 0): Ring[] {
+export function legsEnvelope(
+  sk: Skeleton,
+  inflate: number,
+  from: number,
+  to: number,
+  extra: (t: number) => number = () => 0,
+  extraCalf: (t: number) => number = () => 0,
+): Ring[] {
   const l = sk.leg(1);
   const prof = limbProfiles(sk);
   const balls = jointBalls(sk, inflate);
@@ -445,7 +461,7 @@ export function legsEnvelope(sk: Skeleton, inflate: number, from: number, to: nu
       const t = Math.min(1, (l.knee[1] - y) / (l.knee[1] - l.ankle[1]));
       cx = lerp(l.knee[0], l.ankle[0], t);
       cz = lerp(l.knee[2], l.ankle[2], t);
-      r = Math.max(r, profileAt(prof.calf, t) + inflate);
+      r = Math.max(r, profileAt(prof.calf, t) + inflate + extraCalf(t));
     } else {
       cx = l.hip[0];
       cz = l.hip[2];
@@ -465,10 +481,146 @@ export function legsEnvelope(sk: Skeleton, inflate: number, from: number, to: nu
   return out;
 }
 
+/** Altura de la cintura según el tiro: alto (al ombligo), medio o bajo (a la cadera). */
+const WAIST_TOP = { alto: 1.065, medio: 1.02, bajo: 0.975 } as const;
+
+/** Hasta dónde sube la parte de abajo (la ropa interior, más abajo; la pollera, a la cintura). */
+export function waistTop(look: Pick<BottomLook, "kind"> & Partial<Pick<BottomLook, "rise">>): number {
+  if (look.kind === "brief") return 0.96;
+  if (look.kind === "skirt") return 1.02;
+  return WAIST_TOP[look.rise ?? "medio"];
+}
+
 /** Cuerpo de la parte de abajo: el pantalón (o short, o ropa interior) hasta la entrepierna, o la pollera. */
 export function bottomShell(sk: Skeleton, look: BottomLook): Ring[] {
   if (look.kind === "skirt") return skirtRings(sk.torso, 1.02, look.length);
-  return shellRings(sk.torso, bottomInflate(look), sk.crotchY, look.kind === "brief" ? 0.96 : 1.02);
+  return shellRings(sk.torso, bottomInflate(look), sk.crotchY, waistTop(look));
+}
+
+/**
+ * Hasta dónde baja la pierna del pantalón por la pantorrilla (0 = rodilla, 1 = tobillo; 0 si no
+ * llega). El largo medido en la foto (la entrepierna comparada con la cintura) o el que dijo la IA:
+ * hasta el zapato, tobillero o capri. Un talle más grande queda más largo.
+ */
+export function pantCalfT(look: BottomLook): number {
+  if (look.kind === "bermuda") return 0.08;
+  if (look.kind !== "pants") return 0;
+  const max = look.cuffs ? 0.94 : 0.965;
+  let t: number;
+  const m = look.pantsMeasured;
+  if (m) {
+    // En el avatar la entrepierna está a 0,855 m, la rodilla a 0,495 m y el tobillo a 0,085 m.
+    const hemY = 0.855 - m.inseam * 0.4;
+    t = (0.495 - hemY) / 0.41;
+  } else t = look.pantLength === "capri" ? 0.55 : look.pantLength === "tobillo" ? 0.85 : max;
+  return Math.min(max, Math.max(0.3, t + 0.03 * (look.ease ?? 0)));
+}
+
+/**
+ * Holgura de cada corte sobre la piel: arriba del muslo (thigh), en la rodilla (knee) y en el
+ * tobillo (hem). El pantalón no se pega a la rodilla ni al gemelo: la tela cae derecha entre esos
+ * puntos (salvo la calza, que va pegada).
+ */
+const PANT_CUT: Record<PantCut, { thigh: number; knee: number; hem: number }> = {
+  calza: { thigh: 0, knee: 0, hem: 0 },
+  chupin: { thigh: 0, knee: 0.012, hem: 0.012 },
+  slim: { thigh: 0, knee: 0.017, hem: 0.024 },
+  recto: { thigh: 0, knee: 0.021, hem: 0.033 },
+  ancho: { thigh: 0.006, knee: 0.04, hem: 0.066 },
+  oxford: { thigh: 0, knee: 0.013, hem: 0.066 },
+  jogger: { thigh: 0.002, knee: 0.022, hem: 0.01 },
+  babucha: { thigh: 0.022, knee: 0.045, hem: 0.011 },
+};
+const PANT_WIDTH = { ajustado: -0.006, regular: 0, holgado: 0.01, "muy-holgado": 0.02 } as const;
+
+/** La pierna del pantalón: perfiles del muslo y de la pantorrilla, y cuánto se corre hacia afuera. */
+export interface PantLegShape {
+  /** Muslo: [k de 0 (cadera) a 1 (rodilla), radio]. */
+  thigh: [number, number][];
+  /** Pantorrilla: [k de 0 (rodilla) a 1 (donde termina), radio]. */
+  calf: [number, number][];
+  calfT: number;
+  /** Un pantalón ancho se abre hacia afuera (entre las piernas no hay lugar): cuánto se corren la rodilla y el tobillo. */
+  kneeShift: number;
+  ankleShift: number;
+}
+
+/**
+ * Forma de la pierna del pantalón según su corte (chupín, slim, recto, ancho, oxford, jogger,
+ * babucha, calza), lo ancho que es y lo que se midió en la foto. Nunca queda más finita que la
+ * pierna: siempre la tapa.
+ */
+export function pantLeg(sk: Skeleton, look: BottomLook): PantLegShape {
+  const prof = limbProfiles(sk);
+  const inf = bottomInflate(look);
+  const calfT = pantCalfT(look);
+  const cut: PantCut = look.tight ? "calza" : (look.cut ?? "recto");
+  if (cut === "calza") {
+    return { thigh: clothProfile(prof.thigh, inf), calf: clothProfile(prof.calf, inf, 0, calfT), calfT, kneeShift: 0, ankleShift: 0 };
+  }
+  const c = PANT_CUT[cut];
+  const w = PANT_WIDTH[look.width ?? "regular"] + 0.004 * (look.ease ?? 0);
+  const cuffed = cut === "jogger" || cut === "babucha";
+  let top = profileAt(prof.thigh, 0) + inf + c.thigh + Math.max(0, w) * 0.5;
+  let kneeR = sk.legR.knee + c.knee + w;
+  let hemR = sk.legR.ankle + c.hem + (cuffed ? 0 : w);
+  const m = look.pantsMeasured;
+  if (m) {
+    // La medida aplanada es media vuelta: radio = ancho × 0,4 m (la cintura) / π.
+    const r = (x: number) => (x * 0.4) / Math.PI;
+    top = Math.max(top, Math.min(0.14, r(m.thigh)));
+    kneeR = Math.min(0.13, Math.max(sk.legR.knee + 0.008, r(m.knee)));
+    hemR = Math.min(0.14, Math.max(sk.legR.ankle + 0.008, r(m.opening)));
+  }
+  kneeR = Math.max(kneeR, sk.legR.knee + 0.006);
+  hemR = Math.max(hemR, sk.legR.ankle + 0.006);
+  const l = sk.leg(1);
+  const kneeShift = Math.max(0, kneeR - (Math.abs(l.knee[0]) - 0.004));
+  const ankleShift = Math.max(0, hemR - (Math.abs(l.ankle[0]) - 0.004));
+  const gap = 0.004;
+  // Muslo: los ajustados siguen la pierna; los demás caen derecho de la cadera a la rodilla.
+  const fitted = cut === "chupin" || cut === "slim" || cut === "oxford";
+  const kneeSkin = profileAt(prof.thigh, 1) + inf;
+  const thigh = [0, 0.15, 0.3, 0.5, 0.7, 0.85, 1].map((k): [number, number] => {
+    const skin = profileAt(prof.thigh, k);
+    const base = fitted ? skin + inf + (kneeR - kneeSkin) * k : top + (kneeR - top) * k;
+    return [k, Math.max(base, skin + kneeShift * k + gap)];
+  });
+  // Pantorrilla: de la rodilla a la boca según el corte (recto, que se abre, con puño...).
+  const calf = [0, 0.1, 0.2, 0.3, 0.42, 0.55, 0.7, 0.8, 0.86, 0.92, 1].map((u): [number, number] => {
+    const t = u * calfT;
+    let r: number;
+    if (cut === "oxford") r = kneeR + (hemR - kneeR) * u ** 1.4;
+    else if (cut === "jogger") r = u < 0.86 ? kneeR + (hemR + 0.014 - kneeR) * (u / 0.86) : hemR + 0.014 * (1 - (u - 0.86) / 0.14);
+    else if (cut === "babucha")
+      r = u < 0.6 ? kneeR * (1 - 0.08 * (u / 0.6)) : u < 0.86 ? kneeR * 0.92 + (hemR + 0.016 - kneeR * 0.92) * ((u - 0.6) / 0.26) : hemR + 0.016 * (1 - (u - 0.86) / 0.14);
+    else r = kneeR + (hemR - kneeR) * u;
+    const shift = kneeShift + (ankleShift - kneeShift) * t;
+    return [u, Math.max(r, profileAt(prof.calf, t) + shift + gap)];
+  });
+  thigh[thigh.length - 1][1] = Math.max(thigh[thigh.length - 1][1], calf[0][1]);
+  calf[0][1] = thigh[thigh.length - 1][1];
+  return { thigh, calf, calfT, kneeShift, ankleShift };
+}
+
+/**
+ * Cuánto más afuera de la pierna (más la holgura) llega la tela en el muslo y en la pantorrilla,
+ * contando lo que se corre hacia afuera: para que lo de encima (una remera, un tapado) la tape.
+ */
+export function bottomLegReach(sk: Skeleton, look: BottomLook): { thigh: (t: number) => number; calf: (t: number) => number } {
+  const prof = limbProfiles(sk);
+  const inf = bottomInflate(look);
+  if (look.kind === "pants") {
+    const p = pantLeg(sk, look);
+    return {
+      thigh: (t) => Math.max(0, profileAt(p.thigh, t) - profileAt(prof.thigh, t) - inf) + p.kneeShift * t,
+      calf: (t) =>
+        t > p.calfT ? 0 : Math.max(0, profileAt(p.calf, t / p.calfT) - profileAt(prof.calf, t) - inf) + p.kneeShift + (p.ankleShift - p.kneeShift) * t,
+    };
+  }
+  const extra = bottomLegExtra(sk, look);
+  const shift = bottomLegShift(sk, look);
+  return { thigh: (t) => extra(t) + shift(t), calf: () => 0 };
 }
 
 /** Si la parte de arriba se ensancha en los hombros (las que tienen mangas los tapan). */

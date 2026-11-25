@@ -40,13 +40,15 @@ function crest(shell: Ring[], x: number): { y: number; z: number } {
 
 /** Cinturón: la tira alrededor de la cintura del pantalón, con la hebilla adelante. */
 function Belt({ waist, look }: { waist: Ring[]; look: AccessoryLook }) {
+  // A la altura de la cintura del pantalón (más arriba con tiro alto, más abajo con tiro bajo).
+  const cy = waist[waist.length - 1].y - 0.02;
   const geo = useMemo(() => {
-    const a = ringAt(waist, 0.987);
-    const b = ringAt(waist, 1.013);
+    const a = ringAt(waist, cy - 0.013);
+    const b = ringAt(waist, cy + 0.013);
     const grow = (r: Ring, y: number) => ({ ...r, y, rx: r.rx + 0.0035, rz: r.rz + 0.0035 });
-    return ringTube([grow(a, 0.987), grow(b, 1.013)], { segments: 48, sub: 1 });
-  }, [waist]);
-  const front = ringAt(waist, 1.0);
+    return ringTube([grow(a, cy - 0.013), grow(b, cy + 0.013)], { segments: 48, sub: 1 });
+  }, [waist, cy]);
+  const front = ringAt(waist, cy);
   const z = front.z + front.rz + 0.008;
   return (
     <group>
@@ -54,15 +56,15 @@ function Belt({ waist, look }: { waist: Ring[]; look: AccessoryLook }) {
         <Mat color={look.color} double />
       </Geo>
       {/* Hebilla: el marco de metal y la punta del cinturón que pasa por adentro */}
-      <mesh position={[0, 1.0, z]}>
+      <mesh position={[0, cy, z]}>
         <boxGeometry args={[0.04, 0.034, 0.004]} />
         <Mat color={look.trim} />
       </mesh>
-      <mesh position={[0, 1.0, z + 0.0012]}>
+      <mesh position={[0, cy, z + 0.0012]}>
         <boxGeometry args={[0.028, 0.022, 0.004]} />
         <Mat color={look.color} />
       </mesh>
-      <mesh position={[0.005, 1.0, z + 0.003]}>
+      <mesh position={[0.005, cy, z + 0.003]}>
         <boxGeometry args={[0.003, 0.024, 0.003]} />
         <Mat color={look.trim} />
       </mesh>
