@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hexToRgb, removeFabric, rotatePoint, unrotatedSize } from "./shirt-texture";
+import { hexToRgb, removeFabric, rotatePoint, unrotatedSize } from "./print-decal";
 import { parseFit } from "./ai-schema";
 
 /** Un cuadro de tela blanca con sombras y un dibujo negro y rojo en el medio. */

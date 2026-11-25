@@ -10,9 +10,6 @@ export function hexToRgb(hex: string): RGB | null {
   return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : null;
 }
 
-export const rgbToHex = ([r, g, b]: RGB) =>
-  "#" + [r, g, b].map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, "0")).join("");
-
 const dist = (d: Uint8ClampedArray, i: number, c: RGB) =>
   Math.abs(d[i] - c[0]) + Math.abs(d[i + 1] - c[1]) + Math.abs(d[i + 2] - c[2]);
 

@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { HAIR_WITH_BACK, cameraFor, glassesById, type BodyDims, type GlassesDef, type Look, type View } from "@/lib/avatar";
-import { buildPrintDecal } from "@/lib/shirt-texture";
+import { buildPrintDecal } from "@/lib/print-decal";
 import type { AvatarStyle, GarmentFit } from "@/lib/types";
 
 type V3 = [number, number, number];
