@@ -267,6 +267,35 @@ export function limbHemPatch(
   return gridGeometry(pos, uv, nx, ny);
 }
 
+/**
+ * Franja sobre el cuerpo de la prenda entre dos bordes que cambian con el ángulo (`lo` y `hi`
+ * dicen la altura de abajo y de arriba en cada ángulo): el escote redondo y su borde tejido.
+ */
+export function shellStrip(
+  shell: Ring[],
+  lo: (phi: number) => number,
+  hi: (phi: number) => number,
+  off: number,
+  phi0 = -Math.PI,
+  phi1 = Math.PI,
+  nx = 64,
+  ny = 3,
+): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const uv: number[] = [];
+  for (let j = 0; j <= ny; j++) {
+    for (let i = 0; i <= nx; i++) {
+      const phi = phi0 + ((phi1 - phi0) * i) / nx;
+      const a = lo(phi);
+      const y = a + ((hi(phi) - a) * j) / ny;
+      const p = shellPoint(shell, y, phi, off);
+      pos.push(p.x, p.y, p.z);
+      uv.push(i / nx, j / ny);
+    }
+  }
+  return gridGeometry(pos, uv, nx, ny);
+}
+
 /** Número entre 0 y 1 que parece al azar pero siempre es el mismo para cada i (así no "bailan"). */
 function noise(i: number): number {
   const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453;

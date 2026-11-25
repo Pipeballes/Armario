@@ -173,21 +173,62 @@ function armJoints(torso: Ring[], hipW: number, sx: number, sk: Pick<Skeleton, "
 }
 
 /** Holgura y vuelo (abajo) de la parte de arriba según su corte. */
-export function topFit(look: Pick<TopLook, "cut" | "ribbed" | "dress"> & { ease?: number }): { inflate: number; flare: number } {
+type TopFitLook = Pick<TopLook, "cut" | "ribbed" | "dress"> & Partial<Pick<TopLook, "ease" | "width" | "measured">>;
+
+/** Holgura extra del cuerpo según lo ancha que es (entallada, normal, oversize, muy grande). */
+const TOP_WIDTH = { ajustado: -0.005, regular: 0, holgado: 0.013, "muy-holgado": 0.026 } as const;
+
+/** Holgura y vuelo (abajo) de la parte de arriba según su corte. */
+export function topFit(look: TopFitLook): { inflate: number; flare: number } {
   if (look.cut === "crop") return { inflate: 0.008, flare: 0 };
   if (look.cut === "bra" || look.cut === "swimsuit") return { inflate: 0.004, flare: 0 };
   if (look.dress !== "none") return { inflate: 0.008, flare: 0 };
   // Un talle más grande que el tuyo queda más holgado (y uno más chico, más pegado).
   const ease = look.ease ?? 0;
-  return {
-    inflate: Math.max(0.005, (look.ribbed ? 0.018 : 0.013) + 0.006 * ease),
-    flare: look.ribbed ? 0 : Math.max(0, 0.012 + 0.004 * ease),
-  };
+  const inflate = Math.max(0.005, (look.ribbed ? 0.018 : 0.013) + TOP_WIDTH[look.width ?? "regular"] + 0.006 * ease);
+  // Vuelo abajo: el que se ve en la foto (ruedo más ancho que el pecho) o el de siempre. Las
+  // oversize son más bien rectas (cuadradas).
+  let flare = look.ribbed ? 0 : look.width === "holgado" || look.width === "muy-holgado" ? 0.006 : 0.012;
+  if (look.measured && !look.ribbed) flare = Math.min(0.04, Math.max(0, ((look.measured.hem - 1) * 0.47) / Math.PI + 0.004));
+  return { inflate, flare: Math.max(0, flare + 0.004 * ease) };
 }
 
 /** Holgura de las mangas de la parte de arriba. */
-export function sleeveInflate(look: Pick<TopLook, "ribbed">): number {
-  return look.ribbed ? 0.016 : 0.012;
+export function sleeveInflate(look: Pick<TopLook, "ribbed"> & Partial<Pick<TopLook, "ease" | "width">>): number {
+  const width = { ajustado: -0.003, regular: 0, holgado: 0.006, "muy-holgado": 0.012 }[look.width ?? "regular"];
+  return Math.max(0.006, (look.ribbed ? 0.016 : 0.012) + width + 0.003 * (look.ease ?? 0));
+}
+
+/**
+ * Medio contorno del pecho de la remera puesta (lo que mide de ancho estirada sobre una mesa): el
+ * del cuerpo más la holgura. Sirve para pasar las proporciones de la foto al avatar.
+ */
+export function chestFlat(sk: Skeleton, inflate: number): number {
+  const r = ringAt(sk.torso, 1.27);
+  const a = r.rx + inflate;
+  const b = r.rz + inflate;
+  return (Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)))) / 2;
+}
+
+/**
+ * Manga corta: hasta dónde baja por el brazo (t, 0 = hombro, 1 = codo) y cuánto más ancha que el
+ * brazo es su boca. Una oversize llega casi al codo y es ancha; una entallada, corta y justa. Si
+ * se midió en la foto, manda la foto.
+ */
+export function topSleeve(sk: Skeleton, look: TopLook): { inflate: number; t: number; open: number } {
+  const inflate = sleeveInflate(look);
+  const ease = look.ease ?? 0;
+  const w = look.width ?? "regular";
+  let t = { ajustado: 0.44, regular: 0.52, holgado: 0.66, "muy-holgado": 0.8 }[w];
+  let open = { ajustado: 0.002, regular: 0.007, holgado: 0.014, "muy-holgado": 0.02 }[w];
+  const m = look.measured;
+  if (m) {
+    t = 0.52 + (m.sleeve - 0.25) * 2.8;
+    const skin = profileAt(limbProfiles(sk).upperArm, Math.min(0.95, Math.max(0.28, t)));
+    const r = (m.opening * chestFlat(sk, topFit(look).inflate)) / Math.PI;
+    open = Math.min(0.04, Math.max(0.002, r - skin - inflate));
+  }
+  return { inflate, t: Math.min(0.95, Math.max(0.28, t + 0.04 * ease)), open: open + 0.002 * Math.max(0, ease) };
 }
 
 /** Forma del abrigo: hasta dónde llega, cuánta holgura tiene el cuerpo y las mangas, y el vuelo abajo. */
@@ -285,7 +326,10 @@ export function skirtRings(torso: Ring[], from: number, length: SkirtLength): Ri
 
 /** Dónde empieza y termina la parte de arriba, y cuánta holgura tiene. */
 export function topShape(sk: Skeleton, look: TopLook): { hem: number; top: number; inflate: number; flare: number } {
-  const neckTop = 1.468;
+  // Los cuellos comunes (redondo, en V, henley, bote) abrazan la base del cuello, como en una remera
+  // de verdad; los demás (camisero, chomba, polera, capucha) arrancan un poco más abajo.
+  const crew = look.neck === "round" || look.neck === "v" || look.neck === "henley" || look.neck === "boat";
+  const neckTop = crew && look.sleeves !== "none" ? CREW_TOP : 1.468;
   const fit = topFit(look);
   switch (look.cut) {
     case "crop":
@@ -300,10 +344,34 @@ export function topShape(sk: Skeleton, look: TopLook): { hem: number; top: numbe
       if (look.dress !== "none") return { hem: 0.97, top, ...fit };
       // Metida adentro del pantalón (con cinturón): termina apenas debajo de la cintura, sin vuelo.
       if (look.tucked) return { hem: 0.985, top, inflate: fit.inflate, flare: 0 };
-      // Un talle más grande cuelga más largo (y uno más chico queda más corto).
-      return { hem: Math.min(0.93, Math.max(0.79, 0.87 - 0.025 * (look.ease ?? 0))), top, ...fit };
+      return { hem: topHem(sk, look, top, fit.inflate), top, ...fit };
     }
   }
+}
+
+/** Altura del borde de arriba de una remera de cuello redondo: la base del cuello. */
+export const CREW_TOP = 1.488;
+
+/**
+ * Dónde termina la remera: lo que se midió en la foto (largo comparado con el ancho del pecho) o
+ * según su largo y lo ancha que es (las oversize son más largas). Un talle más grande cuelga más
+ * largo (y uno más chico queda más corto).
+ */
+function topHem(sk: Skeleton, look: TopLook, top: number, inflate: number): number {
+  const ease = look.ease ?? 0;
+  let hem: number;
+  if (look.measured) {
+    // Una remera común mide de largo 1,37 veces su ancho de pecho y en el avatar llega a 0,87 m.
+    // Una oversize de verdad es bastante más ancha de pecho que lo que se dibuja (se vería inflada),
+    // así que su largo se calcula con su ancho real.
+    const real = { ajustado: 0.96, regular: 1, holgado: 1.08, "muy-holgado": 1.15 }[look.width ?? "regular"];
+    const scale = (chestFlat(sk, inflate) / chestFlat(sk, 0.013)) * real;
+    hem = top - (top - 0.87) * (look.measured.length / 1.37) * scale;
+  } else {
+    hem = 0.87 + { corto: 0.1, normal: 0, largo: -0.07 }[look.length ?? "normal"];
+    hem += { ajustado: 0.01, regular: 0, holgado: -0.02, "muy-holgado": -0.045 }[look.width ?? "regular"];
+  }
+  return Math.min(1.02, Math.max(0.76, hem - 0.025 * ease));
 }
 
 /**
@@ -524,11 +592,13 @@ function skirtRoomAtHands(length: SkirtLength): number {
 }
 
 /** Lugar que necesitan los brazos con esta ropa puesta (ver ArmRoom). */
-export function armRoom(look: Look): ArmRoom {
+export function armRoom(look: Look, worn?: TopLook): ArmRoom {
   const gap = 0.004;
-  const top = wornTop(look);
+  // La remera que lleva puesta (con lo que se midió en la foto, si se pasa).
+  const top = worn ?? wornTop(look);
   const fit = topFit(top);
-  let torso = fit.inflate + gap;
+  // Una manga más ancha (oversize) también aparta un poco el brazo.
+  let torso = fit.inflate + Math.max(0, sleeveInflate(top) - 0.012) + gap;
   // A la altura de las manos: el ruedo de la remera (si llega), el pantalón o la pollera.
   let hips = top.cut === "normal" || top.cut === "swimsuit" ? fit.inflate + fit.flare + gap : gap;
   if (top.dress !== "none") hips = Math.max(hips, skirtRoomAtHands(top.dress) + gap);

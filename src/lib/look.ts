@@ -37,8 +37,11 @@ export interface TopLook {
   /** Color de cuello, puños y ruedo. */
   trim: string;
   sleeves: "none" | "short" | "long";
-  /** Cuello: redondo, en V, camisero, de chomba, alto (polera), con capucha, o tiras (musculosa, corpiño). */
-  neck: "round" | "v" | "collar" | "polo" | "turtle" | "hood" | "straps";
+  /**
+   * Cuello: redondo, en V, henley (redondo con botoncitos), bote (ancho), camisero, de chomba,
+   * alto (polera), con capucha, o tiras (musculosa, corpiño).
+   */
+  neck: "round" | "v" | "henley" | "boat" | "collar" | "polo" | "turtle" | "hood" | "straps";
   /** Largo del torso: normal, corto (crop), corpiño o malla enteriza. */
   cut: "normal" | "crop" | "bra" | "swimsuit";
   /** Tira de botones: hasta abajo (camisa), corta (chomba) o abierta (cárdigan). */
@@ -63,7 +66,29 @@ export interface TopLook {
   tucked: boolean;
   /** Talles más grande (+) o más chica (−) que el tuyo (0 si es el tuyo o no se sabe). */
   ease: number;
+  /** Qué tan ancha es: entallada, normal, oversize o muy grande (hombros caídos, mangas largas). */
+  width: "ajustado" | "regular" | "holgado" | "muy-holgado";
+  /** Largo del cuerpo: corta (a la cintura), normal (a la cadera) o larga. */
+  length: "corto" | "normal" | "largo";
+  /** Color de las mangas (el del cuerpo, salvo en una remera de béisbol). */
+  sleeveColor: string;
+  /** Medidas tomadas de la foto (si se pudieron medir): ver lib/photo-shape. */
+  measured?: TopMeasured;
+  /** La foto de adelante, para medir el largo, el ancho y las mangas de verdad. */
+  source?: { src: string; fit?: GarmentFit };
   print?: PrintRef;
+}
+
+/** Proporciones de la remera medidas en su foto, comparadas con el ancho del pecho. */
+export interface TopMeasured {
+  /** Largo (del hombro al ruedo) sobre el ancho del pecho. */
+  length: number;
+  /** Cuánto salen las mangas de cada lado, sobre el ancho del pecho. */
+  sleeve: number;
+  /** Boca de la manga (aplanada) sobre el ancho del pecho. */
+  opening: number;
+  /** Ancho del ruedo sobre el ancho del pecho (más de 1: se abre abajo). */
+  hem: number;
 }
 
 export interface BottomLook {
@@ -273,6 +298,9 @@ const LONG_SLEEVES = new Set([
   "remera-uv",
 ]);
 const SHIRTS = new Set(["camisa", "camisa-manga-corta", "camisa-pijama"]);
+/** Prendas que pueden tener cualquier cuello común (redondo, en V, henley, bote): manda lo que vio la IA. */
+const FREE_NECK = new Set(["remera", "remera-manga-larga", "buzo", "sweater", "blusa", "tunica", "body", "remera-pijama", "camiseta-equipo"]);
+const AI_NECK = { redondo: "round", v: "v", henley: "henley", bote: "boat" } as const;
 const RIBBED = new Set(["buzo", "hoodie", "sweater", "cardigan", "polera", "chaleco-tejido"]);
 
 function topLook(g: Garment): TopLook {
@@ -315,7 +343,12 @@ function topLook(g: Garment): TopLook {
           : "short";
   const shirt = SHIRTS.has(k) || (!known && /camisa/.test(name));
   const hood = k === "hoodie" || Boolean(d.hood);
-  const neck: TopLook["neck"] = shirt
+  // Cuello que vio la IA (en una remera o buzo, o si no se sabe qué prenda es).
+  const aiNeck = d.neck && d.neck in AI_NECK ? AI_NECK[d.neck as keyof typeof AI_NECK] : null;
+  const freeNeck = (FREE_NECK.has(k) || !known) && sleeves !== "none";
+  const neck: TopLook["neck"] = freeNeck && aiNeck
+    ? aiNeck
+    : shirt
     ? "collar"
     : k === "chomba"
       ? "polo"
@@ -329,11 +362,12 @@ function topLook(g: Garment): TopLook {
               ? "straps"
               : "round";
   // Una camisa siempre tiene tira de botones (aunque en la foto no se vean); si la IA contó más, esos.
-  const defaultButtons = k === "camisa" || k === "camisa-pijama" ? 7 : shirt ? 6 : k === "chomba" ? 3 : k === "cardigan" ? 5 : 0;
-  const buttons = Math.max(defaultButtons, d.buttons ?? 0);
+  const defaultButtons =
+    neck === "henley" ? 3 : k === "camisa" || k === "camisa-pijama" ? 7 : shirt ? 6 : k === "chomba" ? 3 : k === "cardigan" ? 5 : 0;
+  const buttons = neck === "henley" ? Math.min(4, Math.max(defaultButtons, d.buttons ?? 0)) : Math.max(defaultButtons, d.buttons ?? 0);
   const placket: TopLook["placket"] = shirt
     ? "full"
-    : k === "chomba"
+    : k === "chomba" || neck === "henley"
       ? "short"
       : k === "cardigan"
         ? "open"
@@ -360,6 +394,10 @@ function topLook(g: Garment): TopLook {
     dress,
     tucked: false,
     ease: 0,
+    width: d.width ?? "regular",
+    length: d.bodyLength ?? (cut === "crop" ? "corto" : "normal"),
+    sleeveColor: d.sleeveColor ?? color,
+    source: g.photo ? { src: g.photo, fit: g.fit?.front } : undefined,
     print: printOf(g, 0.62),
   };
 }
@@ -647,6 +685,9 @@ export const DEFAULT_TOP: TopLook = {
   dress: "none",
   tucked: false,
   ease: 0,
+  width: "regular",
+  length: "normal",
+  sleeveColor: "#d6d0c6",
 };
 export const DEFAULT_BOTTOM: BottomLook = {
   color: "#8f8a82",

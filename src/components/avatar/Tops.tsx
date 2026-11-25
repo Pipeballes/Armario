@@ -1,17 +1,28 @@
 "use client";
 
 // Parte de arriba del avatar: remera, camisa, chomba, buzo, hoodie, polera, cárdigan, musculosa,
-// corpiño, malla y el cuerpo de los vestidos. Cada tipo con sus detalles: cuello, tira de botones,
-// bolsillos, puños, franjas, capucha con cordones.
+// corpiño, malla y el cuerpo de los vestidos. Cada tipo con sus detalles: cuello (el redondo baja
+// adelante con su borde tejido, como en una remera de verdad; en V, henley o de bote), tira de
+// botones, bolsillos, puños, franjas, capucha con cordones, y las costuras de hombros y ruedo.
 
 import { useMemo } from "react";
 import * as THREE from "three";
 import type { TopLook } from "@/lib/look";
-import { ringAt, skirtRings, sleeveInflate, strapPath, topCoversShoulders, topHemTube, type Ring, type Skeleton, type SkirtLength } from "@/lib/skeleton";
+import {
+  ringAt,
+  skirtRings,
+  strapPath,
+  topCoversShoulders,
+  topHemTube,
+  topSleeve,
+  type Ring,
+  type Skeleton,
+  type SkirtLength,
+} from "@/lib/skeleton";
 import { Geo } from "./Body";
 import { Mat, REPEAT, shade, type Fill } from "./materials";
 import { ButtonRow, Line, Piece, PrintDecal, RingBand, Sleeve, type Decal } from "./parts";
-import { axisLathe, phiAtX, ringTube, shellPatch, shellPoint } from "./shapes";
+import { axisLathe, phiAtX, ringTube, shellPatch, shellPoint, shellStrip } from "./shapes";
 
 
 /** Cuello camisero: una banda alrededor del cuello, abierta adelante, con las dos puntas hacia abajo. */
@@ -41,8 +52,114 @@ function Collar({ ring, color, trim, polo = false }: { ring: Ring; color: string
   );
 }
 
+/** Cuánto baja adelante el escote redondo (y el de bote) desde la base del cuello. */
+const CREW_DROP = { round: 0.034, boat: 0.024 } as const;
+
+/** Altura del escote en cada ángulo (0 = adelante): baja adelante y apenas en los costados (el de bote, más ancho). */
+function neckline(yTop: number, style: "round" | "boat") {
+  const drop = CREW_DROP[style];
+  const base = style === "boat" ? 0.55 : 0;
+  const p = style === "boat" ? 0.7 : 1.5;
+  return (phi: number) => yTop - drop * (base + (1 - base) * Math.max(0, Math.cos(phi)) ** p);
+}
+
+/**
+ * Tapa de piel entre el borde de arriba de la remera y el cuello: mirando desde arriba se ve la
+ * base del cuello y no el revés de la tela.
+ */
+function NeckLid({ ring, sk, skin }: { ring: Ring; sk: Skeleton; skin: string }) {
+  const geo = useMemo(() => {
+    // Radio del cuello a esa altura (el cuello se ensancha hacia abajo, como en Body).
+    const t = Math.min(1, Math.max(0, (ring.y - sk.neck.bottom) / (sk.neck.top - sk.neck.bottom)));
+    const k = t < 0.18 ? 1.6 + (1.25 - 1.6) * (t / 0.18) : t < 0.42 ? 1.25 + (1.06 - 1.25) * ((t - 0.18) / 0.24) : 1.06;
+    const rIn = sk.neck.r * k - 0.002;
+    const zIn = -0.012 + 0.006 * t;
+    const n = 48;
+    const pos: number[] = [];
+    const idx: number[] = [];
+    for (let i = 0; i <= n; i++) {
+      const a = (2 * Math.PI * i) / n;
+      pos.push((ring.rx - 0.001) * Math.sin(a), ring.y - 0.001, ring.z + (ring.rz - 0.001) * Math.cos(a));
+      pos.push(rIn * Math.sin(a), ring.y - 0.001, zIn + rIn * Math.cos(a));
+      if (i < n) idx.push(2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 1, 2 * i + 3, 2 * i + 2);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  }, [ring, sk.neck]);
+  return (
+    <Geo geo={geo} cast={false}>
+      <Mat color={skin} double />
+    </Geo>
+  );
+}
+
+/**
+ * Cuello redondo de remera (o de bote): baja adelante, se ve la piel del escote y lo rodea el
+ * borde tejido (una banda con su costura y el borde enrollado), como en una remera de verdad.
+ */
+function CrewNeck({ shell, style, skin, trim, ribbed }: { shell: Ring[]; style: "round" | "boat"; skin: string; trim: string; ribbed: boolean }) {
+  const top = shell[shell.length - 1];
+  const band = ribbed ? 0.02 : 0.014;
+  const parts = useMemo(() => {
+    const yTop = top.y - 0.0005;
+    const line = neckline(yTop, style);
+    const front = style === "round" ? Math.PI / 2 : Math.PI;
+    const skinGeo = shellStrip(shell, line, () => yTop, 0.0016, -front, front, 48, 3);
+    const rib = shellStrip(shell, (phi) => line(phi) - band, line, 0.0019, -Math.PI, Math.PI, 72, 2);
+    const ring = (dy: number, off: number) =>
+      Array.from({ length: 49 }, (_, i) => {
+        const phi = -Math.PI + (2 * Math.PI * i) / 48;
+        return shellPoint(shell, line(phi) + dy, phi, off);
+      });
+    return { skinGeo, rib, edge: ring(0, 0.0026), seam: ring(-band, 0.0025) };
+  }, [shell, top.y, style, band]);
+  return (
+    <>
+      <Piece geo={parts.skinGeo} color={skin} />
+      <Piece geo={parts.rib} color={shade(trim, ribbed ? -0.02 : 0.01)} />
+      <Line points={parts.edge} r={ribbed ? 0.0042 : 0.0032} color={trim} />
+      <Line points={parts.seam} r={0.0006} color={shade(trim, -0.06)} />
+    </>
+  );
+}
+
+/** Costura del hombro: del cuello hasta donde arranca la manga. */
+function ShoulderSeams({ shell, color }: { shell: Ring[]; color: string }) {
+  const lines = useMemo(() => {
+    const yTop = shell[shell.length - 1].y - 0.004;
+    return [-1, 1].map((s) => Array.from({ length: 7 }, (_, i) => shellPoint(shell, yTop - (0.075 * i) / 6, s * (Math.PI / 2 - 0.05), 0.0012)));
+  }, [shell]);
+  return (
+    <>
+      {lines.map((pts, i) => (
+        <Line key={i} points={pts} r={0.0007} color={color} />
+      ))}
+    </>
+  );
+}
+
+/** Doble costura del ruedo (como en las remeras de verdad), un poco arriba del borde. */
+function HemStitch({ shell, color }: { shell: Ring[]; color: string }) {
+  const lines = useMemo(() => {
+    const y0 = shell[0].y;
+    return [0.016, 0.021].map((dy) =>
+      Array.from({ length: 49 }, (_, i) => shellPoint(shell, y0 + dy, -Math.PI + (2 * Math.PI * i) / 48, 0.0013)),
+    );
+  }, [shell]);
+  return (
+    <>
+      {lines.map((pts, i) => (
+        <Line key={i} points={pts} r={0.0006} color={color} />
+      ))}
+    </>
+  );
+}
+
 /** Escote en V: la piel que se ve y el borde tejido a los dos lados. */
-function VNeck({ shell, depth, skin, trim }: { shell: Ring[]; depth: number; skin: string; trim: string }) {
+function VNeck({ shell, depth, skin, trim, back = false }: { shell: Ring[]; depth: number; skin: string; trim: string; back?: boolean }) {
   const top = shell[shell.length - 1];
   const yTop = top.y - 0.004;
   const yBot = yTop - depth;
@@ -65,12 +182,26 @@ function VNeck({ shell, depth, skin, trim }: { shell: Ring[]; depth: number; ski
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [shell, yBot, yTop, hw],
   );
+  // El borde tejido sigue por detrás del cuello (de una punta de la V a la otra).
+  const backBand = useMemo(() => {
+    if (!back) return null;
+    const a = phiAtX(shell, yTop, hw);
+    const geo = shellStrip(shell, () => yTop - 0.012, () => top.y - 0.0005, 0.0019, a, 2 * Math.PI - a, 48, 2);
+    const edge = Array.from({ length: 33 }, (_, i) => shellPoint(shell, yTop, a + ((2 * Math.PI - 2 * a) * i) / 32, 0.003));
+    return { geo, edge };
+  }, [back, shell, yTop, hw, top.y]);
   return (
     <>
       <Piece geo={geo} color={skin} />
       {edges.map((pts, i) => (
         <Line key={i} points={pts} r={0.0042} color={trim} />
       ))}
+      {backBand && (
+        <>
+          <Piece geo={backBand.geo} color={shade(trim, 0.01)} />
+          <Line points={backBand.edge} r={0.0032} color={trim} />
+        </>
+      )}
     </>
   );
 }
@@ -259,10 +390,16 @@ export function TopGarment({
   const topRing = shell[shell.length - 1];
   const hemY = shell[0].y;
   const straps = look.neck === "straps" || look.cut === "bra" || look.cut === "swimsuit";
-  const vDepth = look.placket === "open" ? 0.17 : look.sleeves === "none" ? 0.12 : 0.075;
-  // La tira de botones arranca debajo del cuello (o del escote, en el cárdigan).
-  const placketTop = look.placket === "open" ? topRing.y - vDepth - 0.004 : topRing.y - 0.012;
-  const placketBottom = look.placket === "short" ? topRing.y - 0.125 : hemY + 0.006;
+  const vDepth = look.placket === "open" ? 0.17 : look.sleeves === "none" ? 0.12 : 0.085;
+  const crew = !straps && (look.neck === "round" || look.neck === "henley" || look.neck === "boat");
+  // La tira de botones arranca debajo del cuello (o del escote: en el cárdigan y en la henley).
+  const placketTop =
+    look.placket === "open" ? topRing.y - vDepth - 0.004 : look.neck === "henley" ? topRing.y - CREW_DROP.round - 0.006 : topRing.y - 0.012;
+  const placketBottom = look.neck === "henley" ? placketTop - 0.1 : look.placket === "short" ? topRing.y - 0.125 : hemY + 0.006;
+  const sleeve = useMemo(() => topSleeve(sk, look), [sk, look]);
+  const seam = shade(color, -0.06);
+  // Mangas de otro color (remera de béisbol): lisas, sin el dibujo del cuerpo.
+  const sleeveFill: Fill = look.sleeveColor !== color ? null : fill;
   return (
     <group>
       <Geo geo={geo}>
@@ -272,13 +409,16 @@ export function TopGarment({
       {decalBack && <PrintDecal shell={shell} tex={decalBack.tex} aspect={decalBack.aspect} place={decalBack.place} back />}
       {/* Ruedo (elastizado en buzos y sweaters). Metida adentro del pantalón, no se ve. */}
       {look.cut !== "swimsuit" && look.dress === "none" && !look.tucked && (
-        <RingBand ring={shell[0]} tube={topHemTube(look)} color={look.trim} />
+        <RingBand ring={shell[0]} tube={topHemTube(look)} color={look.ribbed ? look.trim : shade(color, -0.04)} />
       )}
+      {look.cut !== "swimsuit" && look.dress === "none" && !look.tucked && !look.ribbed && <HemStitch shell={shell} color={seam} />}
       {/* Cuello */}
-      {!straps && look.neck === "round" && <RingBand ring={topRing} tube={0.007} color={look.trim} />}
+      {crew && <CrewNeck shell={shell} style={look.neck === "boat" ? "boat" : "round"} skin={skin} trim={look.trim} ribbed={look.ribbed} />}
+      {(crew || look.neck === "v") && <NeckLid ring={topRing} sk={sk} skin={skin} />}
+      {!straps && topCoversShoulders(look) && !look.ribbed && <ShoulderSeams shell={shell} color={seam} />}
       {!straps && look.neck === "collar" && <Collar ring={topRing} color={color} trim={look.trim} />}
       {!straps && look.neck === "polo" && <Collar ring={topRing} color={color} trim={look.trim} polo />}
-      {look.neck === "v" && <VNeck shell={shell} depth={vDepth} skin={skin} trim={look.trim} />}
+      {look.neck === "v" && <VNeck shell={shell} depth={vDepth} skin={skin} trim={look.trim} back={topCoversShoulders(look) && look.placket !== "open"} />}
       {!straps && look.neck === "turtle" && (
         <Geo
           geo={axisLathe([0, topRing.y - 0.01, topRing.z], [0, 1.555, -0.008], [
@@ -322,12 +462,15 @@ export function TopGarment({
               <Sleeve
                 sk={sk}
                 length={look.sleeves === "long" ? "long" : "short"}
-                inflate={sleeveInflate(look)}
-                color={color}
-                pattern={fill}
-                trim={look.trim}
+                inflate={sleeve.inflate}
+                shortT={sleeve.t}
+                open={sleeve.open}
+                color={look.sleeveColor}
+                pattern={sleeveFill}
+                trim={look.sleeveColor !== color && look.trim === look.color ? look.sleeveColor : look.trim}
                 cuff={look.ribbed ? "ribbed" : look.cuffs ? "shirt" : "plain"}
                 buttonColor={look.buttonColor}
+                stitch={look.ribbed || look.cuffs ? undefined : shade(look.sleeveColor, -0.06)}
               />
             </group>
           ))}

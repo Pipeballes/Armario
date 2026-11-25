@@ -327,3 +327,36 @@ describe("piernas del short", () => {
     expect(bottomLegExtra(sk, measured)(0.5)).toBeGreaterThan(bottomLegExtra(sk, short)(0.5));
   });
 });
+
+describe("forma de la remera", () => {
+  it("oversize: más ancha, más larga y con mangas más largas y anchas; entallada al revés", async () => {
+    const { topFit, topShape, topSleeve } = await import("./skeleton");
+    const { DEFAULT_TOP } = await import("./look");
+    const sk = buildSkeleton(dims({ gender: "hombre" }));
+    const over = { ...DEFAULT_TOP, width: "holgado" as const };
+    const slim = { ...DEFAULT_TOP, width: "ajustado" as const };
+    expect(topFit(over).inflate).toBeGreaterThan(topFit(DEFAULT_TOP).inflate);
+    expect(topFit(slim).inflate).toBeLessThan(topFit(DEFAULT_TOP).inflate);
+    expect(topShape(sk, over).hem).toBeLessThan(topShape(sk, DEFAULT_TOP).hem);
+    expect(topSleeve(sk, over).t).toBeGreaterThan(topSleeve(sk, DEFAULT_TOP).t);
+    expect(topSleeve(sk, over).open).toBeGreaterThan(topSleeve(sk, DEFAULT_TOP).open);
+    expect(topSleeve(sk, slim).t).toBeLessThan(topSleeve(sk, DEFAULT_TOP).t);
+    // Corta y larga.
+    expect(topShape(sk, { ...DEFAULT_TOP, length: "corto" }).hem).toBeGreaterThan(topShape(sk, DEFAULT_TOP).hem);
+    expect(topShape(sk, { ...DEFAULT_TOP, length: "largo" }).hem).toBeLessThan(topShape(sk, DEFAULT_TOP).hem);
+  });
+
+  it("con las medidas de la foto: el largo y las mangas salen de ahí", async () => {
+    const { topShape, topSleeve, CREW_TOP } = await import("./skeleton");
+    const { DEFAULT_TOP } = await import("./look");
+    const sk = buildSkeleton(dims({ gender: "hombre" }));
+    const regular = { ...DEFAULT_TOP, measured: { length: 1.37, sleeve: 0.25, opening: 0.34, hem: 1 } };
+    const long = { ...DEFAULT_TOP, measured: { length: 1.6, sleeve: 0.4, opening: 0.45, hem: 1.1 } };
+    // Una común queda como siempre (hasta la entrepierna) y el cuello abraza la base del cuello.
+    expect(topShape(sk, regular).hem).toBeCloseTo(0.87, 2);
+    expect(topShape(sk, regular).top).toBe(CREW_TOP);
+    expect(topShape(sk, long).hem).toBeLessThan(0.8);
+    expect(topSleeve(sk, long).t).toBeGreaterThan(topSleeve(sk, regular).t);
+    expect(topShape(sk, long).flare).toBeGreaterThan(topShape(sk, regular).flare);
+  });
+});

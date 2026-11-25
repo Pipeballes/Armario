@@ -1,8 +1,10 @@
 // Medidas de la prenda a partir de su foto: en un short o un pantalón, el ancho de la cintura,
-// dónde se separan las piernas (el tiro), el largo de la entrepierna y la boca de la pierna. Así
-// cada short sale con su largo y su ancho de verdad, no todos iguales.
+// dónde se separan las piernas (el tiro), el largo de la entrepierna y la boca de la pierna; en una
+// remera, el ancho del pecho, el largo, cuánto salen las mangas y lo ancha que es su boca. Así cada
+// prenda sale con su forma de verdad, no todas iguales.
 
 import { backgroundMask, uprightGarment } from "./print-decal";
+import type { TopMeasured } from "./look";
 import type { GarmentFit } from "./types";
 
 export interface BottomMeasure {
@@ -101,6 +103,111 @@ export function bottomShapeFromMeasure(m: BottomMeasure): { legT: number; hemR: 
   return { legT: Math.round(legT * 100) / 100, hemR: Math.round(hemR * 1000) / 1000 };
 }
 
+export interface TopMeasure {
+  /** Ancho del pecho, justo debajo de las axilas (en píxeles de la foto enderezada). */
+  chest: number;
+  /** Largo total, del hombro al ruedo. */
+  length: number;
+  /** Cuánto sale cada manga más allá del pecho (promedio de las dos). */
+  sleeve: number;
+  /** Boca de la manga aplanada (promedio de las dos). */
+  opening: number;
+  /** Ancho del ruedo. */
+  hem: number;
+}
+
+const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length ? s[Math.floor(s.length / 2)] : 0;
+};
+
+/**
+ * Mide la silueta de una remera (o camisa, o chomba) estirada en la foto: de abajo hacia arriba el
+ * ancho se mantiene (el cuerpo) hasta que de golpe crece (empiezan las mangas): ahí están las
+ * axilas. Devuelve null si no se parece a una remera de manga corta.
+ */
+export function measureTopMask(mask: Uint8Array, w: number, h: number): TopMeasure | null {
+  const span: ([number, number] | null)[] = [];
+  for (let y = 0; y < h; y++) {
+    const r = runs(mask, w, y, 2);
+    span.push(r.length ? [r[0][0], r[r.length - 1][1]] : null);
+  }
+  const width = (y: number) => (span[y] ? span[y]![1] - span[y]![0] : 0);
+  let top = -1;
+  let bottom = -1;
+  for (let y = 0; y < h && top < 0; y++) if (span[y]) top = y;
+  for (let y = h - 1; y >= 0 && bottom < 0; y--) if (span[y]) bottom = y;
+  if (top < 0 || bottom - top < 20) return null;
+  const H = bottom - top + 1;
+  const rows = (a: number, b: number) => Array.from({ length: Math.max(0, b - a + 1) }, (_, i) => a + i);
+  const hem = median(rows(bottom - Math.round(H * 0.12), bottom - Math.round(H * 0.03)).map(width));
+  if (hem < 10) return null;
+  // Subiendo desde abajo: la axila es donde el ancho salta de golpe.
+  const k = Math.max(2, Math.round(H * 0.02));
+  let armpit = -1;
+  for (let y = bottom - Math.round(H * 0.25); y > top + k; y--) {
+    if (width(y) > width(y + k) * 1.1 + 2) {
+      armpit = y + k;
+      break;
+    }
+  }
+  if (armpit < top + H * 0.12 || armpit > top + H * 0.6) return null;
+  const chest = median(rows(armpit + Math.round(H * 0.03), armpit + Math.round(H * 0.08)).map(width));
+  let maxSpan = 0;
+  let left = w;
+  let right = 0;
+  for (const y of rows(top, armpit)) {
+    if (!span[y]) continue;
+    maxSpan = Math.max(maxSpan, width(y));
+    left = Math.min(left, span[y]![0]);
+    right = Math.max(right, span[y]![1]);
+  }
+  // Boca de la manga: cuánto mide de alto la manga un poquito antes de su punta.
+  const inset = Math.max(2, Math.round(chest * 0.04));
+  const tall = (x: number) => rows(top, armpit).filter((y) => mask[y * w + x] === 1).length;
+  const opening = (tall(Math.min(w - 1, left + inset)) + tall(Math.max(0, right - 1 - inset))) / 2;
+  const m = { chest, length: H, sleeve: (maxSpan - chest) / 2, opening, hem };
+  // Lo que no tiene sentido (sin mangas, mangas largas, una persona en vez de la remera) se descarta.
+  const r = { length: m.length / chest, sleeve: m.sleeve / chest, opening: m.opening / chest, hem: m.hem / chest };
+  if (chest < 10 || r.length < 0.8 || r.length > 2 || r.sleeve < 0.03 || r.sleeve > 0.6) return null;
+  if (r.opening < 0.12 || r.opening > 0.75 || r.hem < 0.75 || r.hem > 1.35) return null;
+  return m;
+}
+
+/** Proporciones de la remera (todo comparado con el ancho del pecho), para el avatar. */
+export function topShapeFromMeasure(m: TopMeasure): TopMeasured {
+  const round = (x: number) => Math.round(x * 1000) / 1000;
+  return { length: round(m.length / m.chest), sleeve: round(m.sleeve / m.chest), opening: round(m.opening / m.chest), hem: round(m.hem / m.chest) };
+}
+
+const topCache = new Map<string, Promise<TopMeasured | null>>();
+
+/** Mide la remera en su foto (una sola vez por foto y ajuste). */
+export function measureTop(src: string, fit: GarmentFit | undefined): Promise<TopMeasured | null> {
+  const key = `${hash(src)}|${JSON.stringify(fit ?? null)}`;
+  let p = topCache.get(key);
+  if (!p) {
+    p = (async () => {
+      const mask = await garmentMask(src, fit);
+      if (!mask) return null;
+      const m = measureTopMask(mask.mask, mask.w, mask.h);
+      return m ? topShapeFromMeasure(m) : null;
+    })().catch(() => null);
+    topCache.set(key, p);
+  }
+  return p;
+}
+
+/** La silueta de la prenda en la foto (1 = prenda, 0 = fondo), ya enderezada. */
+async function garmentMask(src: string, fit: GarmentFit | undefined): Promise<{ mask: Uint8Array; w: number; h: number } | null> {
+  const g = await uprightGarment(src, fit, 300);
+  if (!g) return null;
+  const bgMask = backgroundMask(g.data.data, g.cw, g.ch, g.fabric, g.bg);
+  const mask = new Uint8Array(g.cw * g.ch);
+  for (let i = 0; i < mask.length; i++) mask[i] = bgMask[i] ? 0 : 1;
+  return { mask, w: g.cw, h: g.ch };
+}
+
 const cache = new Map<string, Promise<{ legT: number; hemR: number } | null>>();
 
 /** Huella corta de un texto largo (la foto en base64), para guardar la medida una vez por foto. */
@@ -119,12 +226,9 @@ export function measureBottom(src: string, fit: GarmentFit | undefined): Promise
   let p = cache.get(key);
   if (!p) {
     p = (async () => {
-      const g = await uprightGarment(src, fit, 300);
+      const g = await garmentMask(src, fit);
       if (!g) return null;
-      const bgMask = backgroundMask(g.data.data, g.cw, g.ch, g.fabric, g.bg);
-      const mask = new Uint8Array(g.cw * g.ch);
-      for (let i = 0; i < mask.length; i++) mask[i] = bgMask[i] ? 0 : 1;
-      const m = measureBottomMask(mask, g.cw, g.ch);
+      const m = measureBottomMask(g.mask, g.w, g.h);
       return m ? bottomShapeFromMeasure(m) : null;
     })().catch(() => null);
     cache.set(key, p);

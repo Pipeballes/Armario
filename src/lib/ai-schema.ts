@@ -19,6 +19,7 @@ import {
   type Undertone,
   type Warmth,
 } from "./catalog";
+import { FIT_VERSION } from "./types";
 
 const ALL_KIND_IDS = [...new Set(Object.values(KINDS).flatMap((list) => list.map((k) => k.id)))];
 
@@ -293,7 +294,10 @@ Y los detalles, para dibujarla como es (si algo no se ve en la foto, poné lo qu
 - leg_length: solo en partes de abajo: "micro" (muy corto), "muslo" (a mitad del muslo), "rodilla" o "largo". Si no es una parte de abajo, "".
 - sleeves: solo en partes de arriba y abrigos: "sin", "cortas" o "largas". Si no tiene mangas que mirar, "".
 - strap: solo en calzado abierto: "dedo" (ojota con la tira entre los dedos), "ancha" (una tira ancha sobre el pie) o "tiras" (sandalia con varias tiras). Si no, "".
-- width: qué tan ancha es: "ajustado" (pegado al cuerpo), "regular", "holgado" o "muy-holgado" (como un short de básquet). En un short o pantalón, mirá la boca de la pierna comparada con la cintura.
+- width: qué tan ancha es: "ajustado" (pegado al cuerpo), "regular", "holgado" o "muy-holgado" (como un short de básquet). En un short o pantalón, mirá la boca de la pierna comparada con la cintura. En una remera o buzo: "holgado" si es oversize (hombros caídos, mangas que llegan casi al codo, cuerpo cuadrado), "muy-holgado" si es enorme, "ajustado" si es entallada.
+- neck: solo en partes de arriba: "redondo", "v" (escote en V), "henley" (redondo con 2 o 3 botones), "bote" (ancho, casi de hombro a hombro), "camisero" (cuello de camisa), "polo" (cuello de chomba), "alto" (polera) o "capucha". Si no es una parte de arriba, "".
+- body_length: solo en partes de arriba: "corto" (llega a la cintura o deja ver la panza), "normal" (a la cadera) o "largo" (tapa la cola). Si no, "".
+- sleeve_color: color (#rrggbb) de las mangas si son de otro color que el cuerpo (como una remera de béisbol). Si son del mismo color, "".
 - hem: cómo termina la pierna o el ruedo: "simple", "doblado" (con la botamanga doblada hacia afuera), "deshilachado" (cortado, con hilos sueltos), "elastico" o "tajo" (con un corte a los costados, como los shorts de correr).`;
 
 /** Instrucciones para el ajuste; si se sabe qué prenda es, la IA busca mejor sus detalles. */
@@ -333,6 +337,9 @@ export const FIT_SCHEMA = {
     strap: { type: "STRING", enum: ["", "dedo", "ancha", "tiras"] },
     width: { type: "STRING", enum: ["ajustado", "regular", "holgado", "muy-holgado"] },
     hem: { type: "STRING", enum: ["simple", "doblado", "deshilachado", "elastico", "tajo"] },
+    neck: { type: "STRING", enum: ["", "redondo", "v", "henley", "bote", "camisero", "polo", "alto", "capucha"] },
+    body_length: { type: "STRING", enum: ["", "corto", "normal", "largo"] },
+    sleeve_color: { type: "STRING" },
   },
   required: ["box", "angle", "fabric", "has_print"],
 };
@@ -391,6 +398,12 @@ export function parseDetails(r: Record<string, unknown>): import("./types").Garm
   if (width) d.width = width;
   const hem = oneOf(r.hem, ["simple", "doblado", "deshilachado", "elastico", "tajo"] as const);
   if (hem && hem !== "simple") d.hem = hem;
+  const neck = oneOf(r.neck, ["redondo", "v", "henley", "bote", "camisero", "polo", "alto", "capucha"] as const);
+  if (neck) d.neck = neck;
+  const bodyLength = oneOf(r.body_length, ["corto", "normal", "largo"] as const);
+  if (bodyLength && bodyLength !== "normal") d.bodyLength = bodyLength;
+  const sleeveColor = hexOr(r.sleeve_color);
+  if (sleeveColor) d.sleeveColor = sleeveColor;
   return Object.keys(d).length ? d : undefined;
 }
 
@@ -405,7 +418,7 @@ export function parseFit(raw: unknown): import("./types").GarmentFit | null {
   if (!fabric) return null;
   const pbox = r.has_print === true ? toBox(r.print_box) : null;
   return {
-    v: 4,
+    v: FIT_VERSION,
     angle: Math.round(angle * 10) / 10,
     box,
     fabric,

@@ -114,6 +114,9 @@ export function Sleeve({
   trim,
   cuff = "plain",
   buttonColor,
+  shortT = 0.52,
+  open = 0.007,
+  stitch,
 }: {
   sk: Skeleton;
   length: "short" | "long";
@@ -123,22 +126,33 @@ export function Sleeve({
   trim: string;
   cuff?: CuffStyle;
   buttonColor?: string;
+  /** Manga corta: hasta dónde baja por el brazo (0 = hombro, 1 = codo). */
+  shortT?: number;
+  /** Manga corta: cuánto más ancha que el brazo es su boca (se va abriendo de a poco). */
+  open?: number;
+  /** Color de la costura del ruedo de la manga (las remeras la tienen; si no se pasa, no se dibuja). */
+  stitch?: string;
 }) {
   const a = useMemo(() => sk.arm(1), [sk]);
   const prof = useMemo(() => limbProfiles(sk), [sk]);
   const j = useMemo(() => jointBalls(sk, inflate), [sk, inflate]);
-  const shortT = 0.52;
   // La manga de camisa termina en un puño un poco más arriba de la muñeca.
   const wristT = cuff === "shirt" ? 0.88 : 0.93;
   const ribbed = cuff === "ribbed";
-  const shortEnd = useMemo(() => lerp3(a.shoulder, a.elbow, shortT), [a]);
+  const shortEnd = useMemo(() => lerp3(a.shoulder, a.elbow, shortT), [a, shortT]);
+  // La manga corta se va abriendo hacia la boca (más en una oversize).
+  const shortProfile = useMemo((): [number, number][] => {
+    const ts = new Set<number>([0, shortT, ...prof.upperArm.map((p) => p[0]).filter((t) => t > 0 && t < shortT)]);
+    for (let i = 1; i < 5; i++) ts.add((shortT * i) / 5);
+    return [...ts]
+      .sort((x, y) => x - y)
+      .map((t) => [t / shortT, profileAt(prof.upperArm, t) + inflate + open * (t / shortT) ** 1.4]);
+  }, [prof, inflate, open, shortT]);
   const wristEnd = useMemo(() => lerp3(a.elbow, a.wrist, wristT), [a, wristT]);
   const upper = useMemo(
     () =>
-      length === "short"
-        ? axisLathe(a.shoulder, shortEnd, clothProfile(prof.upperArm, inflate, 0, shortT, profileAt(prof.upperArm, shortT) + inflate + 0.007))
-        : axisLathe(a.shoulder, a.elbow, clothProfile(prof.upperArm, inflate)),
-    [length, a, shortEnd, prof, inflate],
+      length === "short" ? axisLathe(a.shoulder, shortEnd, shortProfile) : axisLathe(a.shoulder, a.elbow, clothProfile(prof.upperArm, inflate)),
+    [length, a, shortEnd, prof, inflate, shortProfile],
   );
   const lower = useMemo(
     () =>
@@ -151,7 +165,16 @@ export function Sleeve({
         : null,
     [length, a, wristEnd, prof, inflate, ribbed, wristT],
   );
-  const shortR = profileAt(prof.upperArm, shortT) + inflate + 0.007;
+  const shortR = profileAt(prof.upperArm, shortT) + inflate + open;
+  // Costura del ruedo de la manga, a un centímetro y medio del borde.
+  const hemSeam = useMemo(() => {
+    if (length !== "short" || !stitch) return null;
+    const f = limbFrame(a.shoulder, a.elbow);
+    const len = Math.hypot(a.elbow[0] - a.shoulder[0], a.elbow[1] - a.shoulder[1], a.elbow[2] - a.shoulder[2]);
+    const t = shortT - 0.015 / len;
+    const r = profileAt(shortProfile, t / shortT) + 0.0012;
+    return Array.from({ length: 33 }, (_, i) => limbPoint(f, t, (2 * Math.PI * i) / 32, r));
+  }, [length, stitch, a, shortT, shortProfile]);
   const cuffR = profileAt(prof.forearm, wristT) + inflate + (ribbed ? 0 : 0.004);
   // Puño de camisa: una banda de unos 4 cm que llega a la muñeca, con su botón.
   const shirtCuff = useMemo(() => {
@@ -177,7 +200,10 @@ export function Sleeve({
         <Mat color={color} pattern={pattern} repeat={REPEAT.sleeve} double />
       </Geo>
       {length === "short" ? (
-        <Cuff from={a.shoulder} to={shortEnd} r={shortR} tube={0.0035} color={trim} />
+        <>
+          <Cuff from={a.shoulder} to={shortEnd} r={shortR} tube={0.0035} color={trim} />
+          {hemSeam && stitch && <Line points={hemSeam} r={0.0006} color={stitch} />}
+        </>
       ) : (
         <>
           <mesh position={j.elbow.at} castShadow>

@@ -11,8 +11,8 @@ import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { cameraFor, type BodyDims, type View } from "@/lib/avatar";
 import { analyzePhotoPrint } from "@/lib/print-decal";
-import { measureBottom } from "@/lib/photo-shape";
-import { wornBottom, wornTop, type BottomLook, type Look } from "@/lib/look";
+import { measureBottom, measureTop } from "@/lib/photo-shape";
+import { wornBottom, wornTop, type BottomLook, type Look, type TopLook, type TopMeasured } from "@/lib/look";
 import {
   armRoom,
   bottomInflate,
@@ -80,19 +80,46 @@ function useMeasuredBottom(bottom: BottomLook | null): BottomLook | null {
   }, [bottom, measurable, shape, src]);
 }
 
+/**
+ * La remera con su largo, su ancho y sus mangas de verdad, medidos en la foto (mientras se mide, o
+ * si no se puede, queda como la describió la IA). Solo las de manga corta, que en la foto se ven
+ * bien estiradas.
+ */
+function useMeasuredTop(top: TopLook): TopLook {
+  const src = top.source?.src;
+  const fit = top.source?.fit;
+  const measurable = Boolean(src && top.sleeves === "short" && top.cut === "normal" && top.dress === "none");
+  const [shape, setShape] = useState<{ src: string; m: TopMeasured } | null>(null);
+  useEffect(() => {
+    if (!measurable || !src) return;
+    let alive = true;
+    measureTop(src, fit).then((m) => {
+      if (alive && m) setShape({ src, m });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [measurable, src, fit]);
+  return useMemo(
+    () => (measurable && shape && shape.src === src ? { ...top, measured: shape.m } : top),
+    [top, measurable, shape, src],
+  );
+}
+
 /** El avatar completo, con la ropa puesta. Respira despacito. */
 function Avatar({ dims, skin, look, style }: { dims: BodyDims; skin: string; look: Look; style: AvatarStyle }) {
-  // Los brazos se abren según el cuerpo y la ropa (un abrigo grueso los separa más).
-  const room = armRoom(look);
+  // Si no elegiste nada, el avatar lleva una remera y un short básicos.
+  const worn = useMemo(() => ({ top: wornTop(look), bottom: wornBottom(look) }), [look]);
+  const top = useMeasuredTop(worn.top);
+  const bottom = useMeasuredBottom(worn.bottom);
+  // Los brazos se abren según el cuerpo y la ropa (un abrigo grueso, o una remera oversize, los separa más).
+  const room = armRoom(look, top);
   const sk = useMemo(() => buildSkeleton(dims, { torso: room.torso, hips: room.hips }), [dims, room.torso, room.hips]);
   const breathe = useRef<THREE.Group>(null);
   useFrame(({ clock }) => {
     if (breathe.current) breathe.current.scale.y = 1 + Math.sin(clock.elapsedTime * 1.6) * 0.003;
   });
 
-  // Si no elegiste nada, el avatar lleva una remera y un short básicos.
-  const top = wornTop(look);
-  const bottom = useMeasuredBottom(wornBottom(look));
   const outer = look.outerwear;
   const acc = look.accessory;
   // Prenda digital: el estampado de cada prenda como calcomanía (el color de la tela ya viene en el look).

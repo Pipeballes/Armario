@@ -248,3 +248,27 @@ describe("shorts: talle, ancho, terminación y bolsillos", () => {
     expect(lookFrom({ bottom: "p" }, withPhoto).bottom!.source).toMatchObject({ src: "data:x" });
   });
 });
+
+describe("remeras: cuello, ancho, largo y mangas", () => {
+  const fit = (details: GarmentFit["details"]): Garment["fit"] => ({ front: { v: 5, angle: 0, box: [0, 0, 1, 1], fabric: "#202020", details } });
+  const ropa = [
+    g({ id: "v", category: "top", kind: "remera", color: "rojo", fit: fit({ neck: "v", width: "ajustado" }) }),
+    g({ id: "h", category: "top", kind: "remera", color: "verde", fit: fit({ neck: "henley" }) }),
+    g({ id: "b", category: "top", kind: "remera", color: "blanco", fit: fit({ sleeveColor: "#1e3278", bodyLength: "largo", width: "holgado" }) }),
+    g({ id: "c", category: "top", kind: "camisa", color: "celeste", fit: fit({ neck: "v" }) }),
+  ];
+
+  it("el cuello sale de lo que vio la IA (en una remera); una camisa sigue con su cuello", () => {
+    expect(lookFrom({ top: "v" }, ropa).top).toMatchObject({ neck: "v", width: "ajustado" });
+    expect(lookFrom({ top: "h" }, ropa).top).toMatchObject({ neck: "henley", placket: "short", buttons: 3 });
+    expect(lookFrom({ top: "c" }, ropa).top!.neck).toBe("collar");
+  });
+
+  it("mangas de otro color, largo y ancho", () => {
+    const b = lookFrom({ top: "b" }, ropa).top!;
+    expect(b).toMatchObject({ sleeveColor: "#1e3278", length: "largo", width: "holgado" });
+    // Sin nada dicho, las mangas son del color del cuerpo.
+    const v = lookFrom({ top: "v" }, ropa).top!;
+    expect(v.sleeveColor).toBe(v.color);
+  });
+});

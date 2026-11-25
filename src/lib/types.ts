@@ -108,6 +108,12 @@ export interface GarmentDetails {
   width?: "ajustado" | "regular" | "holgado" | "muy-holgado";
   /** Cómo termina la pierna o el ruedo: simple, doblado, deshilachado, con elástico o con tajo al costado. */
   hem?: "simple" | "doblado" | "deshilachado" | "elastico" | "tajo";
+  /** Cuello de una parte de arriba. */
+  neck?: "redondo" | "v" | "henley" | "bote" | "camisero" | "polo" | "alto" | "capucha";
+  /** Largo del cuerpo de una parte de arriba: corto (a la cintura), normal (a la cadera) o largo. */
+  bodyLength?: "corto" | "normal" | "largo";
+  /** Color de las mangas, si son de otro color que el cuerpo (remera de béisbol). */
+  sleeveColor?: string;
 }
 
 export interface GarmentFit {
@@ -133,7 +139,14 @@ export interface GarmentFit {
 }
 
 /** Versión actual del ajuste de fotos. */
-export const FIT_VERSION = 4;
+export const FIT_VERSION = 5;
+/**
+ * Versión que necesita cada prenda: la 5 sumó detalles de las partes de arriba (cuello, largo,
+ * color de mangas), así que solo esas se vuelven a mirar; el resto sigue bien con la 4.
+ */
+export function fitVersionFor(category: string): number {
+  return category === "top" || category === "dress" || category === "pijama" ? FIT_VERSION : 4;
+}
 
 export type HairId =
   | "corto"

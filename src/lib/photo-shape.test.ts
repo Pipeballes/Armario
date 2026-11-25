@@ -61,3 +61,72 @@ describe("medidas de un short desde la foto", () => {
     expect(measureBottomMask(mask, w, h)).toBeNull();
   });
 });
+
+/** Silueta de una remera estirada (máscara de 240 × 240): pecho, largo, mangas, boca y ruedo. */
+function tee(chest: number, length: number, sleeve: number, opening: number, hemRatio = 1) {
+  const w = 240;
+  const h = 240;
+  const cx = 120;
+  const top = 10;
+  const c = chest / 2;
+  const sy = top + 0.07 * chest;
+  const armpit = sy + 0.3 * sleeve + opening * 0.6;
+  const side = (s: number): [number, number][] => [
+    [cx + s * 0.18 * chest, top],
+    [cx + s * 0.45 * chest, sy],
+    [cx + s * (c + sleeve), sy + 0.3 * sleeve],
+    [cx + s * (c + sleeve - 0.15 * opening), sy + 0.3 * sleeve + opening],
+    [cx + s * c, armpit],
+    [cx + s * c * hemRatio, top + length],
+  ];
+  const poly = [...side(-1), ...side(1).reverse(), [cx, top + 0.05 * chest] as [number, number]];
+  const mask = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      let inside = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const [xi, yi] = poly[i];
+        const [xj, yj] = poly[j];
+        if (yi > y + 0.5 !== yj > y + 0.5 && x + 0.5 < ((xj - xi) * (y + 0.5 - yi)) / (yj - yi) + xi) inside = !inside;
+      }
+      if (inside) mask[y * w + x] = 1;
+    }
+  return { mask, w, h };
+}
+
+describe("medidas de una remera desde la foto", () => {
+  it("encuentra el pecho, el largo, las mangas y el ruedo", async () => {
+    const { measureTopMask, topShapeFromMeasure } = await import("./photo-shape");
+    const t = tee(110, 150, 30, 40);
+    const m = measureTopMask(t.mask, t.w, t.h)!;
+    expect(m).not.toBeNull();
+    expect(m.chest).toBeGreaterThan(104);
+    expect(m.chest).toBeLessThan(118);
+    expect(m.length).toBeGreaterThan(145);
+    expect(m.length).toBeLessThan(155);
+    expect(m.sleeve).toBeGreaterThan(24);
+    expect(m.sleeve).toBeLessThan(34);
+    const r = topShapeFromMeasure(m);
+    expect(r.hem).toBeGreaterThan(0.9);
+    expect(r.hem).toBeLessThan(1.1);
+  });
+
+  it("una oversize sale más cuadrada y con mangas más largas; una que se abre abajo, con más ruedo", async () => {
+    const { measureTopMask, topShapeFromMeasure } = await import("./photo-shape");
+    const regular = topShapeFromMeasure(measureTopMask(...Object.values(tee(110, 150, 28, 40)) as [Uint8Array, number, number])!);
+    const over = topShapeFromMeasure(measureTopMask(...Object.values(tee(130, 145, 45, 52)) as [Uint8Array, number, number])!);
+    expect(over.length).toBeLessThan(regular.length);
+    expect(over.sleeve).toBeGreaterThan(regular.sleeve);
+    const aline = topShapeFromMeasure(measureTopMask(...Object.values(tee(110, 150, 28, 40, 1.2)) as [Uint8Array, number, number])!);
+    expect(aline.hem).toBeGreaterThan(regular.hem + 0.1);
+  });
+
+  it("descarta lo que no es una remera de manga corta", async () => {
+    const { measureTopMask } = await import("./photo-shape");
+    // Un rectángulo (sin mangas): no hay axilas.
+    const w = 100;
+    const mask = new Uint8Array(w * w);
+    for (let y = 10; y < 90; y++) for (let x = 30; x < 70; x++) mask[y * w + x] = 1;
+    expect(measureTopMask(mask, w, w)).toBeNull();
+  });
+});
