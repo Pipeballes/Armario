@@ -15,6 +15,14 @@ export default function GarmentPhoto({ garment, className = "" }: { garment: Gar
       ×{qty}
     </span>
   );
+  if (!garment.photo) {
+    // Sin foto (por ejemplo, una copia de seguridad vieja): un recuadro con el color de la prenda.
+    return (
+      <span className={`relative block ${base}`} aria-label={garment.name}>
+        {badge}
+      </span>
+    );
+  }
   if (!garment.photoBack) {
     return (
       <span className="relative block">
