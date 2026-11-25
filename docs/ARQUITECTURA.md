@@ -27,7 +27,14 @@
 
 ## Probador 3D
 
-- **`components/Avatar3D.tsx`**: el avatar y la ropa, con three.js. Todo es geometría simple (esferas, cápsulas y piezas torneadas) con sombreado tipo dibujito.
+El avatar se arma con geometría propia (sin modelos externos) para que cargue rápido en el celular, con sombreado tipo dibujito.
+
+- **`lib/skeleton.ts`** (lógica pura, con pruebas): las proporciones. El torso es una lista de cortes ovalados (de la entrepierna al cuello) y brazos y piernas tienen sus articulaciones y su curva de grosor. También:
+  - **Brazos**: cuelgan al costado y se abren lo justo para no atravesar la panza ni la cadera, según el cuerpo y la ropa (`armRoom`: un abrigo grueso los separa más).
+  - **Articulaciones**: cada bola (hombro, codo, muñeca, cadera, rodilla, tobillo) es un poco más grande que la boca de los tubos que llegan a ella (`jointBalls`), así nunca queda una ranura por la que se vea el interior. La ropa usa las mismas bolas, con el mismo centro y la holgura de la tela.
+  - **Ropa**: cada prenda es el cuerpo "inflado" (nunca más finita que la piel) y las capas se respetan: el pantalón, arriba la remera y arriba el abrigo; cada una envuelve a las de abajo, incluidos los muslos (`layerOver`, `legsEnvelope`).
+- **`components/avatar/`**: el dibujo. `shapes.ts` (tubos de corte ovalado y piezas torneadas, con normales suaves), `Body.tsx` (piel: torso, brazos, manos con sus cinco dedos, piernas y pies), `Head.tsx` (cara, 17 peinados, anteojos), `Clothes.tsx` (cada tipo de prenda, calzado y accesorios) y `materials.tsx`.
+- **`components/Avatar3D.tsx`**: la escena (luces, piso, cámara) y el armado del avatar con la ropa puesta. El lado izquierdo del cuerpo es el espejo del derecho.
 - **`lib/avatar.ts`**: medidas del cuerpo según el perfil, color de piel, peinados, anteojos, qué prenda va en cada lugar del cuerpo (`slotOf`) y cómo dibujarla (`lookFrom`).
 - **`lib/fit.ts`** + **`lib/print-decal.ts`**: la prenda "digitalizada". La IA ubica la prenda y el estampado en la foto (aunque esté torcida); en el navegador se recorta el estampado, se endereza, se le saca la tela de alrededor y se pega como calcomanía sobre la prenda del color de la tela.
 
@@ -39,4 +46,4 @@
 
 ## Pruebas
 
-`npm test` corre las pruebas de `src/lib` (vitest): armador de outfits, semana, compras, agenda, clima, IA (validación de respuestas), catálogo, placard, avatar, recordatorio y la calcomanía del estampado. Además, cada cambio de pantalla se prueba con Playwright en un navegador sin ventana (scripts locales, no incluidos en el repo).
+`npm test` corre las pruebas de `src/lib` (vitest): armador de outfits, semana, compras, agenda, clima, IA (validación de respuestas), catálogo, placard, avatar, esqueleto 3D (proporciones, articulaciones, brazos, capas de ropa, tiras), recordatorio y la calcomanía del estampado. Además, cada cambio de pantalla se prueba con Playwright en un navegador sin ventana (scripts locales, no incluidos en el repo).
