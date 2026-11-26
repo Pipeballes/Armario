@@ -52,14 +52,21 @@ Primero es para uso personal. Se construye pensando en que más adelante la usen
 1. [x] Base de la app: estructura, diseño y armario guardado en el navegador (sin cuentas todavía).
 2. [x] Carga de prendas con etiquetas manuales y motor de outfits por reglas.
 3. [x] Conectar Supabase (cuentas y fotos en la nube).
-4. [ ] Conectar la IA gratis (Gemini) para clasificar fotos y analizar el perfil. (Código listo; falta cargar la clave.)
-5. [ ] Publicar en Vercel e instalarla en el celular.
+4. [x] Conectar la IA gratis (Gemini) para clasificar fotos y analizar el perfil.
+5. [x] Publicar en Vercel e instalarla en el celular.
 
 ## Hecho además
 - [x] Conexión con varios calendarios del iPhone (iCloud) o de Google por link compartido, cada uno con su nombre y color: en "¿Qué me pongo?" aparecen los próximos eventos y se arma el outfit para cada uno.
 - [x] Clima automático con Open-Meteo (ubicación del celular o ciudad), para ahora o para la hora del evento, con aviso de lluvia.
 - [x] Probador 3D: avatar tipo maniquí con altura, silueta y tono de piel del perfil; se viste con la ropa del armario (colores y tipo de prenda); vistas de frente, costado, espalda y "cómo te ven" (otra persona a unos 2 m); se gira con el dedo.
 - [x] Entrada con código de 6 números por mail (enviado desde Gmail como "Armario").
+- [x] Recordatorio a la mañana con notificación: evento del día, clima y qué ponerse.
+- [x] Pregunta de género: tipos de prenda, nombres ("calzoncillo" / "bombacha"), íconos y avatar según el género.
+- [x] Prendas con 3 fotos (adelante, atrás y etiqueta), talle obligatorio (US en calzado), deporte y tipo de prenda.
+- [x] Pijama, ropa interior y malla, con secciones por parte y contador de prendas iguales.
+- [x] Armario como placard digital (barral, estantes, cajones, organizador y zapatero).
+- [x] Avatar con 17 peinados y 13 anteojos (recetados y de sol) con color de armazón.
+- [x] Prenda "digitalizada" en el probador: color de la tela y el estampado recortado de la foto, aunque esté torcida.
 
 ## Para más adelante (si se vende)
 - Probarla en uno mismo y mostrar el antes y el después.

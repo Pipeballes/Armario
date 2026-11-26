@@ -200,3 +200,10 @@ export function cleanBackground(canvas: HTMLCanvasElement): string | null {
   out.getContext("2d")!.putImageData(img, 0, 0);
   return out.toDataURL("image/jpeg", 0.85);
 }
+
+/** Convierte una foto (link o data URL) en un data URL achicado, para mandarla a la IA. */
+export async function urlToDataUrl(src: string, maxSide = 900): Promise<string> {
+  const blob = await (await fetch(src)).blob();
+  const file = new File([blob], "foto.jpg", { type: blob.type || "image/jpeg" });
+  return (await resizePhoto(file, maxSide)).dataUrl;
+}

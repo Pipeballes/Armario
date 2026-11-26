@@ -13,12 +13,14 @@ import {
 } from "@/lib/catalog";
 import { parseBackup, type Backup } from "@/lib/db";
 import { resizePhoto } from "@/lib/image";
+import { SIZE_LETTERS } from "@/lib/sizes";
 import { actions, useArmario } from "@/lib/store";
 import type { Profile } from "@/lib/types";
 import { Chip, ErrorBox, Loading, Section, Swatch } from "@/components/ui";
 import AccountSection from "@/components/AccountSection";
 import ProfileAnalysis from "@/components/ProfileAnalysis";
 import CalendarSection from "@/components/CalendarSection";
+import ReminderSection from "@/components/ReminderSection";
 
 const MAX_INSPIRATION = 12;
 
@@ -32,6 +34,8 @@ export default function PerfilPage() {
 
   // Cada cambio se guarda al instante.
   const save = (patch: Partial<Profile>) => actions.saveProfile({ ...profile, ...patch });
+
+  const setSize = (slot: "top" | "bottom", value: string | undefined) => save({ sizes: { ...profile.sizes, [slot]: value } });
 
   const toggleStyle = (id: StyleId) =>
     save({
@@ -66,7 +70,12 @@ export default function PerfilPage() {
         version: 1,
         exportedAt: new Date().toISOString(),
         profile: { ...profile, inspiration: await Promise.all(profile.inspiration.map(toData)) },
-        garments: await Promise.all(garments.map(async (g) => ({ ...g, photo: await toData(g.photo) }))),
+        garments: await Promise.all(garments.map(async (g) => ({
+            ...g,
+            photo: await toData(g.photo),
+            photoBack: g.photoBack ? await toData(g.photoBack) : undefined,
+            photoLabel: g.photoLabel ? await toData(g.photoLabel) : undefined,
+          }))),
       };
     } catch {
       setStatus("No se pudo preparar la copia. Revisá tu conexión.");
@@ -126,6 +135,7 @@ export default function PerfilPage() {
       <ProfileAnalysis />
       <AccountSection />
       <CalendarSection />
+      <ReminderSection />
 
       <Section title="Tu nombre">
         <input
@@ -215,6 +225,46 @@ export default function PerfilPage() {
           placeholder="Ej: 175"
         />
       </Section>
+
+      <div id="talle">
+        <Section
+          title="Tu talle de siempre (opcional)"
+          hint="Así el probador te avisa si una prenda te queda grande o chica, y el avatar la muestra más suelta o más justa."
+        >
+          {(["top", "bottom"] as const).map((slot) => {
+            const mine = profile.sizes?.[slot];
+            const isNumber = Boolean(mine && /^\d+$/.test(mine));
+            return (
+              <div key={slot} className="mb-3">
+                <p className="mb-1 text-sm">{slot === "top" ? "👕 Arriba (remeras, buzos, camisas)" : "🩳 Abajo (shorts, pantalones)"}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {SIZE_LETTERS.map((l) => (
+                    <Chip key={l} pressed={mine === l} onClick={() => setSize(slot, mine === l ? undefined : l)}>
+                      {l}
+                    </Chip>
+                  ))}
+                  <input
+                    key={mine ?? ""}
+                    className="input w-28"
+                    type="number"
+                    inputMode="numeric"
+                    min={20}
+                    max={64}
+                    aria-label={slot === "top" ? "Talle de arriba en número" : "Talle de abajo en número"}
+                    placeholder="ej. 42"
+                    defaultValue={isNumber ? mine : ""}
+                    onBlur={(e) => {
+                      const v = e.target.value.trim();
+                      if (v) setSize(slot, v);
+                      else if (isNumber) setSize(slot, undefined);
+                    }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </Section>
+      </div>
 
       <Section title="Estilos que te gustan" hint="Elegí uno o más. Los outfits van a ir para ese lado.">
         <div className="grid grid-cols-2 gap-2">

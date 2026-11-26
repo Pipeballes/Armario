@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Geist } from "next/font/google";
 import BottomNav from "@/components/BottomNav";
+import ReminderSync from "@/components/ReminderSync";
 import ServiceWorker from "@/components/ServiceWorker";
 import "./globals.css";
 
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <main className="mx-auto w-full max-w-xl px-4 pt-6 pb-28">{children}</main>
         <BottomNav />
         <ServiceWorker />
+        <ReminderSync />
       </body>
     </html>
   );

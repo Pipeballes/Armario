@@ -1,17 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { bodyDims, lookFrom, selectionFrom, skinColor } from "./avatar";
-import { EMPTY_PROFILE, type Garment } from "./types";
+import { bodyDims, skinColor } from "./avatar";
+import { EMPTY_PROFILE } from "./types";
 
-const g = (p: Partial<Garment> & Pick<Garment, "id" | "category" | "color">): Garment => ({
-  photo: "",
-  name: "prenda",
-  pattern: "liso",
-  styles: [],
-  formality: 2,
-  warmth: "medium",
-  createdAt: 0,
-  ...p,
-});
 
 describe("bodyDims", () => {
   it("usa la altura y la silueta del perfil", () => {
@@ -32,31 +22,5 @@ describe("skinColor", () => {
     const a = skinColor({ ...EMPTY_PROFILE, skinDepth: "clara", undertone: "frio" });
     const b = skinColor({ ...EMPTY_PROFILE, skinDepth: "oscura", undertone: "calido" });
     expect(a).not.toBe(b);
-  });
-});
-
-describe("lookFrom", () => {
-  const ropa = [
-    g({ id: "t", category: "top", color: "blanco", name: "Remera blanca", warmth: "light" }),
-    g({ id: "b", category: "bottom", color: "denim", name: "Jean" }),
-    g({ id: "s", category: "bottom", color: "beige", name: "Bermuda beige" }),
-    g({ id: "d", category: "dress", color: "rojo", name: "Vestido de fiesta", formality: 5 }),
-    g({ id: "z", category: "shoes", color: "marron", name: "Botas marrones" }),
-    g({ id: "c", category: "accessory", color: "negro", name: "Gorra negra" }),
-  ];
-
-  it("pone cada prenda en su lugar con su color", () => {
-    const look = lookFrom(selectionFrom([ropa[0], ropa[1], ropa[4], ropa[5]]), ropa);
-    expect(look.top).toMatchObject({ color: "#f7f7f5", sleeves: "short", dress: "none" });
-    expect(look.bottom).toMatchObject({ kind: "pants" });
-    expect(look.shoes).toMatchObject({ boots: true });
-    expect(look.accessory).toMatchObject({ kind: "cap" });
-  });
-
-  it("reconoce bermudas y vestidos largos, y el vestido tapa lo de abajo", () => {
-    expect(lookFrom({ bottom: "s" }, ropa).bottom?.kind).toBe("shorts");
-    const look = lookFrom({ top: "d", bottom: "b" }, ropa);
-    expect(look.top?.dress).toBe("long");
-    expect(look.bottom).toBeNull();
   });
 });

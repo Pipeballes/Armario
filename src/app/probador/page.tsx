@@ -2,11 +2,12 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { ensureFits, needsFit } from "@/lib/fit";
+import { lookFrom } from "@/lib/look";
 import {
   SLOTS,
   bodyDims,
-  lookFrom,
   selectionFrom,
   skinColor,
   slotOf,
@@ -17,10 +18,13 @@ import {
   HAIRS,
   HAIR_COLORS,
   GLASSES,
+  FRAME_COLORS,
+  glassesById,
   EXPRESSIONS,
   avatarOf,
 } from "@/lib/avatar";
 import { suggestOutfits } from "@/lib/outfits";
+import { fitNote, sizeDiff } from "@/lib/sizes";
 import { actions, useArmario } from "@/lib/store";
 import type { AvatarStyle } from "@/lib/types";
 import GarmentPhoto from "@/components/GarmentPhoto";
@@ -37,9 +41,12 @@ const VIEWS: { id: View; label: string; hint: string }[] = [
   { id: "costado", label: "Costado", hint: "" },
   { id: "espalda", label: "Espalda", hint: "" },
   { id: "cara", label: "🙂 Cara", hint: "" },
-  { id: "otro", label: "👀 Cómo te ven", hint: "Así te vería alguien parado a unos 2 metros, a la altura de sus ojos." },
+  {
+    id: "otro",
+    label: "👀 Cómo te ven",
+    hint: "Así te vería alguien parado a unos 2 metros, a la altura de sus ojos.",
+  },
 ];
-
 
 function initialSelection(): Selection {
   try {
@@ -55,7 +62,7 @@ function initialSelection(): Selection {
 }
 
 export default function ProbadorPage() {
-  const { ready, garments, profile, error } = useArmario();
+  const { ready, garments, profile, error, account } = useArmario();
   const [sel, setSel] = useState<Selection>(initialSelection);
   const [slot, setSlot] = useState<Slot>("top");
   const [view, setView] = useState<View>("frente");
@@ -64,7 +71,32 @@ export default function ProbadorPage() {
 
   const dims = useMemo(() => bodyDims(profile), [profile]);
   const skin = useMemo(() => skinColor(profile), [profile]);
-  const look = useMemo(() => lookFrom(sel, garments), [sel, garments]);
+  // Remera adentro o afuera del pantalón. Si no elegiste nada arriba y sí abajo, va adentro sola:
+  // así se ven bien la cintura y los bolsillos de lo que te estás probando.
+  const [tuckPref, setTuckPref] = useState<boolean | null>(null);
+  const bottomCategory = garments.find((g) => g.id === sel.bottom)?.category;
+  const tuck = tuckPref ?? (!sel.top && bottomCategory === "bottom");
+  const look = useMemo(
+    () => lookFrom(sel, garments, profile.gender, { sizes: profile.sizes, tuck }),
+    [sel, garments, profile.gender, profile.sizes, tuck],
+  );
+  // Las prendas cargadas antes no tienen el ajuste de la foto (o es de una versión vieja): la IA lo
+  // calcula la primera vez que te las probás, de a una.
+  const [fitting, setFitting] = useState(false);
+  const toFit = useMemo(
+    () => Object.values(sel).flatMap((id) => garments.filter((g) => g.id === id && needsFit(g))),
+    [sel, garments],
+  );
+  useEffect(() => {
+    if (!account || toFit.length === 0) return;
+    let alive = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFitting(true);
+    ensureFits(toFit).finally(() => alive && setFitting(false));
+    return () => {
+      alive = false;
+    };
+  }, [account, toFit]);
   const style = useMemo(() => avatarOf(profile), [profile]);
 
   if (!ready) return <Loading />;
@@ -92,6 +124,23 @@ export default function ProbadorPage() {
 
   const current = VIEWS.find((v) => v.id === view)!;
 
+  // Se puede meter adentro una parte de arriba común (no un vestido ni un top corto) si hay algo abajo.
+  const shownTop = look.top;
+  const canTuck =
+    (!shownTop || (shownTop.cut === "normal" && shownTop.dress === "none" && !shownTop.tucked)) &&
+    look.bottom !== null &&
+    look.bottom?.kind !== "brief" &&
+    bottomCategory !== "interior";
+
+  // Cómo te queda cada prenda según su talle y el tuyo.
+  const sizeNotes = (["top", "bottom"] as const).flatMap((s) => {
+    const g = garments.find((x) => x.id === sel[s]);
+    if (!g?.size) return [];
+    const mine = profile.sizes?.[s];
+    const diff = sizeDiff(g.size, mine);
+    return [{ slot: s, name: g.name, size: g.size, mine, diff }];
+  });
+
   return (
     <div>
       <h1 className="page-title mb-1">Probador 3D</h1>
@@ -99,6 +148,11 @@ export default function ProbadorPage() {
 
       <div className="card relative mb-3 h-[58vh] min-h-[340px] overflow-hidden p-0">
         <Avatar3D dims={dims} skin={skin} look={look} view={view} style={style} onUserMove={() => setTouched(true)} />
+        {fitting && (
+          <p className="absolute top-3 left-1/2 -translate-x-1/2 animate-pulse rounded-full bg-black/60 px-3 py-1 text-xs text-white">
+            ✨ Acomodando la prenda…
+          </p>
+        )}
         {!touched && view !== "otro" && (
           <p className="pointer-events-none absolute inset-x-0 bottom-3 text-center text-xs text-muted">
             👆 Arrastrá para girar · 🤏 pellizcá para acercar
@@ -127,6 +181,46 @@ export default function ProbadorPage() {
         ))}
       </div>
 
+      {(canTuck || sizeNotes.length > 0) && (
+        <div className="card mb-4 space-y-2 p-3 text-sm">
+          {canTuck && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold">👕 Parte de arriba</span>
+              <div className="flex gap-1.5">
+                <button type="button" className="chip" aria-pressed={!tuck} onClick={() => setTuckPref(false)}>
+                  Afuera
+                </button>
+                <button type="button" className="chip" aria-pressed={tuck} onClick={() => setTuckPref(true)}>
+                  Adentro
+                </button>
+              </div>
+            </div>
+          )}
+          {sizeNotes.map((n) => (
+            <p key={n.slot}>
+              📏 <strong>{n.name}</strong> · talle {n.size}
+              {n.diff !== null ? (
+                <>
+                  {" "}
+                  · vos {n.mine} → <strong>{fitNote(n.diff)}</strong>
+                </>
+              ) : !n.mine ? (
+                <>
+                  {" "}
+                  ·{" "}
+                  <Link href="/perfil#talle" className="underline">
+                    cargá tu talle en Perfil
+                  </Link>{" "}
+                  para ver cómo te queda
+                </>
+              ) : (
+                <span className="text-muted"> · no se puede comparar con tu talle ({n.mine})</span>
+              )}
+            </p>
+          ))}
+        </div>
+      )}
+
       <div className="card mb-4 p-3">
         <button
           type="button"
@@ -143,7 +237,13 @@ export default function ProbadorPage() {
               <span className="label">Peinado</span>
               <div className="flex flex-wrap gap-2">
                 {HAIRS.map((h) => (
-                  <button key={h.id} type="button" className="chip" aria-pressed={style.hair === h.id} onClick={() => setStyle({ hair: h.id })}>
+                  <button
+                    key={h.id}
+                    type="button"
+                    className="chip"
+                    aria-pressed={style.hair === h.id}
+                    onClick={() => setStyle({ hair: h.id })}
+                  >
                     {h.label}
                   </button>
                 ))}
@@ -165,32 +265,82 @@ export default function ProbadorPage() {
                 ))}
               </div>
             </div>
-            <div>
-              <span className="label">Barba</span>
-              <div className="flex gap-2">
-                <button type="button" className="chip" aria-pressed={!style.beard} onClick={() => setStyle({ beard: false })}>
-                  Sin barba
-                </button>
-                <button type="button" className="chip" aria-pressed={style.beard} onClick={() => setStyle({ beard: true })}>
-                  Con barba
-                </button>
+            {profile.gender !== "mujer" && (
+              <div>
+                <span className="label">Barba</span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="chip"
+                    aria-pressed={!style.beard}
+                    onClick={() => setStyle({ beard: false })}
+                  >
+                    Sin barba
+                  </button>
+                  <button
+                    type="button"
+                    className="chip"
+                    aria-pressed={style.beard}
+                    onClick={() => setStyle({ beard: true })}
+                  >
+                    Con barba
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
             <div>
               <span className="label">Anteojos</span>
-              <div className="flex flex-wrap gap-2">
-                {GLASSES.map((g) => (
-                  <button key={g.id} type="button" className="chip" aria-pressed={(style.glasses ?? "ninguno") === g.id} onClick={() => setStyle({ glasses: g.id })}>
-                    {g.label}
-                  </button>
-                ))}
-              </div>
+              {(["recetados", "sol"] as const).map((group) => (
+                <div key={group} className="mb-2">
+                  <p className="mb-1 text-xs text-muted">{group === "sol" ? "😎 De sol" : "👓 Recetados"}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {GLASSES.filter((g) => (group === "sol" ? g.sun : !g.sun)).map((g) => (
+                      <button
+                        key={g.id}
+                        type="button"
+                        className="chip"
+                        aria-pressed={(style.glasses ?? "ninguno") === g.id}
+                        onClick={() => setStyle({ glasses: g.id, glassesColor: undefined })}
+                      >
+                        {g.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {(style.glasses ?? "ninguno") !== "ninguno" && (
+                <div>
+                  <p className="mb-1 text-xs text-muted">Color del armazón</p>
+                  <div className="flex flex-wrap gap-2">
+                    {FRAME_COLORS.map((c) => (
+                      <button
+                        key={c.hex}
+                        type="button"
+                        aria-label={`Armazón ${c.label}`}
+                        aria-pressed={(style.glassesColor ?? glassesById(style.glasses).frame) === c.hex}
+                        onClick={() => setStyle({ glassesColor: c.hex })}
+                        className={`h-8 w-8 rounded-full border-2 ${(style.glassesColor ?? glassesById(style.glasses).frame) === c.hex ? "border-accent ring-2 ring-accent/30" : "border-line"}`}
+                        style={{ background: c.hex }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <span className="label">Expresión</span>
               <div className="flex flex-wrap gap-2">
                 {EXPRESSIONS.map((e) => (
-                  <button key={e.id} type="button" className="chip" aria-pressed={(style.expression ?? "sonrisa") === e.id} onClick={() => { setStyle({ expression: e.id }); setView("cara"); }}>
+                  <button
+                    key={e.id}
+                    type="button"
+                    className="chip"
+                    aria-pressed={(style.expression ?? "sonrisa") === e.id}
+                    onClick={() => {
+                      setStyle({ expression: e.id });
+                      setView("cara");
+                    }}
+                  >
                     {e.label}
                   </button>
                 ))}

@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { CATEGORIES } from "@/lib/catalog";
 import { useArmario } from "@/lib/store";
 import { ErrorBox, Loading } from "@/components/ui";
+import { PlacardPreview } from "@/components/Placard";
 
 export default function Home() {
   const { ready, garments, profile, error } = useArmario();
@@ -89,17 +89,7 @@ export default function Home() {
             Ver todo ({garments.length})
           </Link>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          {CATEGORIES.map((c) => (
-            <Link key={c.id} href="/armario" className="card p-3 text-center">
-              <span className="text-2xl" aria-hidden>
-                {c.emoji}
-              </span>
-              <p className="text-lg font-semibold">{garments.filter((g) => g.category === c.id).length}</p>
-              <p className="text-xs text-muted">{c.plural}</p>
-            </Link>
-          ))}
-        </div>
+        <PlacardPreview garments={garments} gender={profile.gender} />
       </section>
     </div>
   );

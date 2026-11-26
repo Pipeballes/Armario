@@ -5,26 +5,28 @@ import { BODY_TYPES, PALETTE_BY_UNDERTONE, SKIN_DEPTHS, UNDERTONES, colorById, t
 import { Swatch } from "./ui";
 import { AiUnavailable, analyzeProfile } from "@/lib/ai";
 import type { ProfileAnalysis as Analysis } from "@/lib/ai-schema";
-import { HAIRS, HAIR_COLOR_BY_ID, GLASSES, avatarOf } from "@/lib/avatar";
+import { HAIRS, HAIR_COLOR_BY_ID, GLASSES, avatarOf, glassesById } from "@/lib/avatar";
 import { resizePhoto } from "@/lib/image";
 import { actions, useArmario } from "@/lib/store";
 import { cloudEnabled } from "@/lib/supabase";
 
-const MAX_PHOTOS = 5;
+const MAX_PHOTOS = 15;
 
 const label = (list: readonly { id: string; label: string }[], id: string | null | undefined) =>
   list.find((x) => x.id === id)?.label ?? "No se pudo ver";
 
-/** Convierte una foto guardada (link) en data URL para mandarla a la IA. */
-async function toDataUrl(src: string): Promise<string> {
-  if (src.startsWith("data:")) return src;
-  const blob = await (await fetch(src)).blob();
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result as string);
-    r.onerror = () => reject(new Error("No pude leer una de tus fotos guardadas."));
-    r.readAsDataURL(blob);
-  });
+/**
+ * Convierte una foto guardada (link) en una más chica para mandarla a la IA.
+ * Con muchas fotos se achican más, así entran todas en un solo envío.
+ */
+async function toDataUrl(src: string, count: number): Promise<string> {
+  try {
+    const blob = await (await fetch(src)).blob();
+    const file = new File([blob], "foto.jpg", { type: blob.type || "image/jpeg" });
+    return (await resizePhoto(file, count > 8 ? 560 : count > 5 ? 680 : 800)).dataUrl;
+  } catch {
+    throw new Error("No pude leer una de tus fotos guardadas. Sacala y subila de nuevo.");
+  }
 }
 
 export default function ProfileAnalysis() {
@@ -92,7 +94,7 @@ export default function ProfileAnalysis() {
     setBusy(true);
     setMsg(null);
     try {
-      const images = await Promise.all(photos.map(toDataUrl));
+      const images = await Promise.all(photos.map((p) => toDataUrl(p, photos.length)));
       setResult(await analyzeProfile(images, profile.gender));
     } catch (e) {
       setMsg(
@@ -120,7 +122,7 @@ export default function ProfileAnalysis() {
         ...current,
         hair: r.avatar.hair ?? current.hair,
         hairColor: (r.avatar.hairColor && HAIR_COLOR_BY_ID[r.avatar.hairColor]) || current.hairColor,
-        beard: r.avatar.beard ?? current.beard,
+        beard: profile.gender === "mujer" ? false : (r.avatar.beard ?? current.beard),
         glasses: r.avatar.glasses ?? current.glasses,
       },
     });
@@ -145,17 +147,26 @@ export default function ProfileAnalysis() {
     <section className="card mb-6 border-accent p-4">
       <p className="mb-1 font-semibold">✨ Tus fotos y lo que ve la IA</p>
       <p className="mb-3 text-sm text-muted">
-        Subí de 1 a {MAX_PHOTOS} fotos tuyas (de frente, de costado, la cara con luz natural). La IA te dice tu subtono,
-        tu tono de piel y tu silueta, y arma tu avatar 3D con tu peinado, color de pelo, barba y anteojos.
+        Subí hasta {MAX_PHOTOS} fotos tuyas (de frente, de costado, la cara con luz natural; mientras más, mejor). La IA
+        te dice tu subtono, tu tono de piel y tu silueta, y arma tu avatar 3D con tu peinado, color de pelo
+        {profile.gender === "mujer" ? "" : ", barba"} y anteojos.
       </p>
 
       {!result && (
         <>
           {photos.length === 0 ? (
-            <label className={`btn-primary w-full cursor-pointer ${saving ? "pointer-events-none opacity-60" : ""}`}>
-              {saving ? "Guardando…" : "📷 Elegir fotos"}
-              {fileInput}
-            </label>
+            <>
+              {analyzed && (
+                <p className="mb-2 rounded-xl bg-surface-2 p-3 text-sm">
+                  Las fotos que usaste antes no se guardaban. Subilas de nuevo y van a quedar acá, con la opción de
+                  sumar más.
+                </p>
+              )}
+              <label className={`btn-primary w-full cursor-pointer ${saving ? "pointer-events-none opacity-60" : ""}`}>
+                {saving ? "Guardando…" : "📷 Elegir fotos"}
+                {fileInput}
+              </label>
+            </>
           ) : (
             <div className="rounded-xl bg-surface-2 p-3">
               <p className="mb-2 text-sm font-semibold">
@@ -166,7 +177,7 @@ export default function ProfileAnalysis() {
                   !busy && <span className="font-normal text-muted"> · ✕ para sacar · ＋ para sumar</span>
                 )}
               </p>
-              <div className="mb-3 grid grid-cols-5 gap-2">
+              <div className="mb-3 grid grid-cols-4 gap-2 sm:grid-cols-5">
                 {photos.map((src, i) => (
                   <div key={src.slice(-40) + i} className="relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -193,7 +204,12 @@ export default function ProfileAnalysis() {
                   </label>
                 )}
               </div>
-              <button type="button" className="btn-primary w-full text-base" disabled={busy || saving} onClick={analyze}>
+              <button
+                type="button"
+                className="btn-primary w-full text-base"
+                disabled={busy || saving}
+                onClick={analyze}
+              >
                 {busy
                   ? "✨ Analizando… (puede tardar unos segundos)"
                   : analyzed
@@ -203,8 +219,8 @@ export default function ProfileAnalysis() {
             </div>
           )}
           <p className="mt-2 text-xs text-muted">
-            Tus fotos quedan guardadas en tu cuenta, privadas, para que puedas sumar más. Se mandan a la IA de Google solo
-            cuando tocás analizar (en el plan gratis, Google puede usarlas para mejorar sus productos).
+            Tus fotos quedan guardadas en tu cuenta, privadas, para que puedas sumar más. Se mandan a la IA de Google
+            solo cuando tocás analizar (en el plan gratis, Google puede usarlas para mejorar sus productos).
           </p>
         </>
       )}
@@ -219,9 +235,9 @@ export default function ProfileAnalysis() {
           <p>
             <strong>Para tu avatar:</strong> pelo {label(HAIRS, result.avatar.hair).toLowerCase()}
             {result.avatar.hairColor ? ` ${result.avatar.hairColor.replace("-", " ")}` : ""}
-            {result.avatar.beard ? ", con barba" : ""}
+            {result.avatar.beard && profile.gender !== "mujer" ? ", con barba" : ""}
             {result.avatar.glasses && result.avatar.glasses !== "ninguno"
-              ? `, anteojos ${label(GLASSES, result.avatar.glasses).toLowerCase()}`
+              ? `, anteojos ${glassesById(result.avatar.glasses).sun ? "de sol " : ""}${label(GLASSES, result.avatar.glasses).toLowerCase()}`
               : ""}
           </p>
           {result.undertone && <Palette undertone={result.undertone} />}
@@ -235,8 +251,8 @@ export default function ProfileAnalysis() {
             </button>
           </div>
           <p className="text-xs text-muted">
-            &quot;Usar estos datos&quot; reemplaza tu perfil actual y arma tu avatar. &quot;Descartar&quot; deja todo como
-            estaba.
+            &quot;Usar estos datos&quot; reemplaza tu perfil actual y arma tu avatar. &quot;Descartar&quot; deja todo
+            como estaba.
           </p>
         </div>
       )}

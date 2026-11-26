@@ -1,579 +1,308 @@
 "use client";
 
-// Avatar 3D tipo maniquí: proporciones del perfil y colores de la ropa elegida.
-// Se arma con formas simples (sin modelos externos) para que cargue rápido en el celular.
+// Escena del probador 3D: el avatar (cuerpo, cabeza, ropa), las luces, el piso y la cámara.
+// El avatar se arma con formas simples (sin modelos externos) para que cargue rápido en el celular:
+// ver components/avatar/ (cuerpo, cabeza, ropa) y lib/skeleton.ts (proporciones).
 
 import { ContactShadows, OrbitControls } from "@react-three/drei";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import { cameraFor, type BodyDims, type Look, type View } from "@/lib/avatar";
+import { cameraFor, type BodyDims, type View } from "@/lib/avatar";
+import { analyzePhotoPrint } from "@/lib/print-decal";
+import { measureBottom, measureTop, type BottomShape } from "@/lib/photo-shape";
+import { wornBottom, wornTop, type BottomLook, type Look, type TopLook, type TopMeasured } from "@/lib/look";
+import {
+  armRoom,
+  bottomInflate,
+  bottomLegReach,
+  bottomShell,
+  buildSkeleton,
+  layerOver,
+  legsEnvelope,
+  limbProfiles,
+  outerShell,
+  profileAt,
+  ringAt,
+  skirtRings,
+  sleeveInflate,
+  topEnvelope,
+  topShell,
+  type Ring,
+  type V3,
+} from "@/lib/skeleton";
 import type { AvatarStyle } from "@/lib/types";
+import { type AccessoryContext, Accessory } from "./avatar/Accessories";
+import BodySkin from "./avatar/Body";
+import { BottomGarment, pantCalfT, pantsOverBoots } from "./avatar/Bottoms";
+import Head from "./avatar/Head";
+import { OuterGarment } from "./avatar/Outer";
+import { useGarmentPrint } from "./avatar/parts";
+import { BootShaft, HEEL_LIFT, HEEL_PITCH, Shoe, soleLift } from "./avatar/Shoes";
+import { Skirt, TopGarment } from "./avatar/Tops";
 
-type V3 = [number, number, number];
-
-/** Textura rayada para las prendas estampadas. */
-function useStripes(color: string, striped: boolean) {
-  return useMemo(() => {
-    if (!striped || typeof document === "undefined") return null;
-    const c = document.createElement("canvas");
-    c.width = 64;
-    c.height = 64;
-    const ctx = c.getContext("2d")!;
-    ctx.fillStyle = color;
-    ctx.fillRect(0, 0, 64, 64);
-    ctx.fillStyle = "rgba(255,255,255,0.45)";
-    for (let y = 0; y < 64; y += 16) ctx.fillRect(0, y, 64, 6);
-    const t = new THREE.CanvasTexture(c);
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(4, 6);
-    t.colorSpace = THREE.SRGBColorSpace;
-    return t;
-  }, [color, striped]);
-}
-
-/** Degradé de 3 tonos para el sombreado tipo dibujo animado. */
-let toonGradient: THREE.DataTexture | null = null;
-function getToonGradient() {
-  if (!toonGradient) {
-    toonGradient = new THREE.DataTexture(new Uint8Array([120, 200, 255]), 3, 1, THREE.RedFormat);
-    toonGradient.minFilter = THREE.NearestFilter;
-    toonGradient.magFilter = THREE.NearestFilter;
-    toonGradient.needsUpdate = true;
-  }
-  return toonGradient;
-}
-
-function Mat({ color, striped = false }: { color: string; striped?: boolean; rough?: number }) {
-  const map = useStripes(color, striped);
-  return <meshToonMaterial color={map ? "#ffffff" : color} map={map ?? undefined} gradientMap={getToonGradient()} />;
-}
-
-/** Cápsula entre dos puntos (brazos, piernas). */
-function Limb({ a, b, r, children }: { a: V3; b: V3; r: number; children: React.ReactNode }) {
-  const { position, quaternion, length } = useMemo(() => {
-    const va = new THREE.Vector3(...a);
-    const vb = new THREE.Vector3(...b);
-    const dir = vb.clone().sub(va);
-    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
-    return { position: va.clone().add(vb).multiplyScalar(0.5), quaternion: q, length: dir.length() };
-  }, [a, b]);
-  return (
-    <mesh position={position} quaternion={quaternion} castShadow>
-      <capsuleGeometry args={[r, Math.max(0.001, length), 6, 16]} />
-      {children}
-    </mesh>
-  );
-}
-
-/** Pieza con forma de torso (o pollera) hecha girando un perfil. Se aplana para que no sea un cilindro. */
-function Lathe({ points, children, flat = 0.62 }: { points: [number, number][]; children: React.ReactNode; flat?: number }) {
-  const geom = useMemo(() => new THREE.LatheGeometry(points.map(([r, y]) => new THREE.Vector2(r, y)), 40), [points]);
-  return (
-    <mesh geometry={geom} scale={[1, 1, flat]} castShadow>
-      {children}
-    </mesh>
-  );
-}
-
-
-const HEAD_Y = 1.67;
-const HEAD_R = 0.15;
-
-/** Cabeza estilo caricatura: grande, redonda, con ojos con brillo, cejas, sonrisa y cachetes. Parpadea. */
-function Head({ skin, style, cap }: { skin: string; style: AvatarStyle; cap: boolean }) {
-  const eyes = useRef<THREE.Group>(null);
-  const head = useRef<THREE.Group>(null);
-  const nextBlink = useRef(2);
-  useFrame(({ clock }) => {
-    const t = clock.elapsedTime;
-    if (head.current) head.current.rotation.z = Math.sin(t * 0.7) * 0.025;
-    if (eyes.current) {
-      if (t > nextBlink.current) {
-        const k = (t - nextBlink.current) / 0.14;
-        eyes.current.scale.y = k < 1 ? Math.abs(1 - 2 * k) * 0.9 + 0.1 : 1;
-        if (k >= 1) nextBlink.current = t + 2.5 + Math.random() * 3;
-      }
-    }
+/** Anillos que ocupa una banda alrededor de la cintura (cinturón, riñonera), para taparla con el abrigo. */
+function bandAround(rings: Ring[], y0: number, y1: number, grow: number): Ring[] {
+  return [y0, y1].map((y) => {
+    const r = ringAt(rings, y);
+    return { ...r, y, rx: r.rx + grow, rz: r.rz + grow };
   });
-  const hair = style.hairColor;
-  const R = HEAD_R;
-  const expr = style.expression ?? "sonrisa";
-  const glasses = style.glasses ?? "ninguno";
-  const wink = expr === "guino";
-  return (
-    <group ref={head} position={[0, HEAD_Y, 0]}>
-      {/* Cara */}
-      <mesh scale={[1, 1.04, 0.96]} castShadow>
-        <sphereGeometry args={[R, 40, 32]} />
-        <Mat color={skin} />
-      </mesh>
-      {/* Orejas */}
-      {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * R * 0.97, -0.005, 0]} scale={[0.55, 1, 0.8]}>
-          <sphereGeometry args={[0.032, 16, 16]} />
-          <Mat color={skin} />
-        </mesh>
-      ))}
-      {/* Ojos con brillo */}
-      <group ref={eyes} position={[0, 0.012, 0]}>
-        {[-1, 1].map((s) =>
-          wink && s === 1 ? (
-            <mesh key={s} position={[s * 0.052, -0.004, R * 0.93]} rotation={[0.1, 0, Math.PI]}>
-              <torusGeometry args={[0.02, 0.005, 8, 16, Math.PI]} />
-              <meshBasicMaterial color="#2a1f1a" />
-            </mesh>
-          ) : (
-          <group key={s} position={[s * 0.052, 0, R * 0.86]}>
-            <mesh scale={[1, 1.15, 0.6]}>
-              <sphereGeometry args={[0.03, 20, 20]} />
-              <meshBasicMaterial color="#ffffff" />
-            </mesh>
-            <mesh position={[0, -0.002, 0.014]} scale={[1, 1.1, 0.6]}>
-              <sphereGeometry args={[0.02, 20, 20]} />
-              <meshBasicMaterial color="#2a1f1a" />
-            </mesh>
-            <mesh position={[0.007, 0.008, 0.027]}>
-              <sphereGeometry args={[0.0065, 10, 10]} />
-              <meshBasicMaterial color="#ffffff" />
-            </mesh>
-          </group>
-          ),
-        )}
-      </group>
-      {/* Cejas */}
-      {[-1, 1].map((s) => (
-        <mesh
-          key={s}
-          position={[s * 0.052, expr === "feliz" ? 0.064 : 0.058, R * 0.9]}
-          rotation={[0, 0, Math.PI / 2 + s * (expr === "serio" ? -0.05 : 0.12)]}
-        >
-          <capsuleGeometry args={[0.006, 0.03, 4, 8]} />
-          <meshBasicMaterial color={hair} />
-        </mesh>
-      ))}
-      {/* Nariz */}
-      <mesh position={[0, -0.018, R * 0.97]}>
-        <sphereGeometry args={[0.014, 16, 16]} />
-        <Mat color={skin} />
-      </mesh>
-      {/* Boca según la expresión */}
-      {expr === "serio" ? (
-        <mesh position={[0, -0.058, R * 0.93]} rotation={[0, 0, Math.PI / 2]}>
-          <capsuleGeometry args={[0.005, 0.034, 4, 8]} />
-          <meshBasicMaterial color="#8a3b2e" />
-        </mesh>
-      ) : expr === "feliz" ? (
-        <group position={[0, -0.05, R * 0.9]} rotation={[0.15, 0, 0]}>
-          <mesh rotation={[0, 0, Math.PI]} scale={[1, 1, 0.4]}>
-            <circleGeometry args={[0.032, 24, 0, Math.PI]} />
-            <meshBasicMaterial color="#6e2a22" side={THREE.DoubleSide} />
-          </mesh>
-          <mesh position={[0, -0.019, 0.002]} scale={[1, 0.5, 1]}>
-            <circleGeometry args={[0.016, 16]} />
-            <meshBasicMaterial color="#e5736b" />
-          </mesh>
-        </group>
-      ) : (
-        <mesh position={[0, -0.05, R * 0.9]} rotation={[0.15, 0, Math.PI]}>
-          <torusGeometry args={[0.026, 0.0055, 8, 24, Math.PI]} />
-          <meshBasicMaterial color="#8a3b2e" />
-        </mesh>
-      )}
-      {/* Anteojos */}
-      {glasses !== "ninguno" && <Glasses kind={glasses} />}
-      {/* Cachetes */}
-      {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * 0.088, -0.03, R * 0.78]} rotation={[0, s * 0.5, 0]} scale={[1, 0.7, 0.25]}>
-          <sphereGeometry args={[0.022, 16, 16]} />
-          <meshBasicMaterial color="#ff8a80" transparent opacity={0.35} />
-        </mesh>
-      ))}
-      {/* Pelo (con gorra se ve solo lo de atrás) */}
-      {!cap && <Hair kind={style.hair} color={hair} />}
-      {cap && (style.hair === "largo" || style.hair === "recogido") && <Hair kind={style.hair} color={hair} backOnly />}
-      {/* Barba */}
-      {style.beard && (
-        <mesh scale={[1.03, 1.06, 1]}>
-          <sphereGeometry args={[R * 1.01, 32, 16, 0, Math.PI, Math.PI * 0.68, Math.PI * 0.26]} />
-          <Mat color={hair} />
-        </mesh>
-      )}
-    </group>
+}
+
+/**
+ * El short o la bermuda con su largo y su ancho de verdad, medidos en la foto (mientras se mide, o
+ * si no se puede, queda como lo describió la IA). Si la foto muestra que es más largo o más corto
+ * de lo que parecía, cambia entre short y bermuda.
+ */
+function useMeasuredBottom(bottom: BottomLook | null): BottomLook | null {
+  const src = bottom?.source?.src;
+  const fit = bottom?.source?.fit;
+  // Solo los que tienen pierna suelta (en los pegados, como la calza o el bóxer, manda el cuerpo).
+  const short = Boolean(bottom && (bottom.kind === "shorts" || bottom.kind === "bermuda") && bottom.legWidth > 0.004);
+  const pants = bottom?.kind === "pants";
+  const measurable = Boolean(bottom && src && !bottom.tight && (short || pants));
+  const [shape, setShape] = useState<({ src: string } & BottomShape) | null>(null);
+  useEffect(() => {
+    if (!measurable || !src) return;
+    let alive = true;
+    measureBottom(src, fit).then((m) => {
+      if (alive && m) setShape({ src, ...m });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [measurable, src, fit]);
+  return useMemo(() => {
+    if (!bottom || !measurable || !shape || shape.src !== src) return bottom;
+    // Pantalón: sus anchos (muslo, rodilla, boca) y su largo de verdad.
+    if (bottom.kind === "pants") return { ...bottom, pantsMeasured: shape.pants };
+    if (bottom.kind === "bermuda") return shape.legT < 0.7 ? { ...bottom, kind: "shorts", legT: shape.legT, hemR: shape.hemR } : bottom;
+    if (shape.legT >= 0.92) return { ...bottom, kind: "bermuda" };
+    return { ...bottom, legT: shape.legT, hemR: shape.hemR };
+  }, [bottom, measurable, shape, src]);
+}
+
+/**
+ * La remera con su largo, su ancho y sus mangas de verdad, medidos en la foto (mientras se mide, o
+ * si no se puede, queda como la describió la IA). Solo las de manga corta, que en la foto se ven
+ * bien estiradas.
+ */
+function useMeasuredTop(top: TopLook): TopLook {
+  const src = top.source?.src;
+  const fit = top.source?.fit;
+  const measurable = Boolean(src && top.sleeves === "short" && top.cut === "normal" && top.dress === "none");
+  const [shape, setShape] = useState<{ src: string; m: TopMeasured } | null>(null);
+  useEffect(() => {
+    if (!measurable || !src) return;
+    let alive = true;
+    measureTop(src, fit).then((m) => {
+      if (alive && m) setShape({ src, m });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [measurable, src, fit]);
+  return useMemo(
+    () => (measurable && shape && shape.src === src ? { ...top, measured: shape.m } : top),
+    [top, measurable, shape, src],
   );
 }
 
-
-function Glasses({ kind }: { kind: NonNullable<AvatarStyle["glasses"]> }) {
-  const R = HEAD_R;
-  const frame = kind === "sol" ? "#151515" : "#2b2b2b";
-  return (
-    <group position={[0, 0.012, R * 0.96]}>
-      {[-1, 1].map((s) => (
-        <group key={s} position={[s * 0.052, 0, 0]}>
-          {kind === "cuadrados" ? (
-            <mesh>
-              <boxGeometry args={[0.07, 0.05, 0.004]} />
-              <meshBasicMaterial color={frame} wireframe={false} transparent opacity={0.22} />
-            </mesh>
-          ) : (
-            <mesh>
-              <circleGeometry args={[0.036, 28]} />
-              <meshBasicMaterial color={kind === "sol" ? "#1d1d1d" : "#bfe3ff"} transparent opacity={kind === "sol" ? 0.92 : 0.18} />
-            </mesh>
-          )}
-          {kind === "cuadrados" ? (
-            <lineSegments>
-              <edgesGeometry args={[new THREE.BoxGeometry(0.07, 0.05, 0.004)]} />
-              <lineBasicMaterial color={frame} />
-            </lineSegments>
-          ) : (
-            <mesh>
-              <torusGeometry args={[0.036, 0.004, 8, 28]} />
-              <meshBasicMaterial color={frame} />
-            </mesh>
-          )}
-        </group>
-      ))}
-      {/* Puente y patillas */}
-      <mesh rotation={[0, 0, Math.PI / 2]}>
-        <capsuleGeometry args={[0.003, 0.024, 4, 6]} />
-        <meshBasicMaterial color={frame} />
-      </mesh>
-      {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * 0.098, 0.004, -0.06]} rotation={[Math.PI / 2, 0, 0]}>
-          <capsuleGeometry args={[0.003, 0.11, 4, 6]} />
-          <meshBasicMaterial color={frame} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-function Hair({ kind, color, backOnly = false }: { kind: AvatarStyle["hair"]; color: string; backOnly?: boolean }) {
-  const R = HEAD_R;
-  const cap = (h: number, yScale: number) => (
-    <mesh position={[0, 0.012, -0.008]} scale={[1.06, yScale, 1.06]}>
-      <sphereGeometry args={[R, 32, 16, 0, Math.PI * 2, 0, h]} />
-      <Mat color={color} />
-    </mesh>
-  );
-  const curls = useMemo(() => {
-    // Rulos repartidos en 3 anillos alrededor de la cabeza (menos sobre la cara).
-    const out: V3[] = [];
-    const rings: [number, number][] = [
-      [0.15, 4],
-      [0.6, 9],
-      [1.05, 11],
-    ];
-    for (const [theta, n] of rings) {
-      for (let i = 0; i < n; i++) {
-        const phi = (i / n) * Math.PI * 2 + theta;
-        const x = Math.sin(theta) * Math.cos(phi) * R * 1.05;
-        const z = Math.sin(theta) * Math.sin(phi) * R * 1.05;
-        // En el anillo de abajo, no tapar la cara.
-        if (theta > 1 && z > R * 0.35) continue;
-        out.push([x, Math.cos(theta) * R * 1.05 + 0.01, z - 0.01]);
-      }
-    }
-    return out;
-  }, [R]);
-  if (backOnly) {
-    return kind === "largo" ? (
-      <mesh position={[0, -0.12, -0.075]} scale={[1.05, 1, 0.55]}>
-        <capsuleGeometry args={[0.12, 0.14, 8, 16]} />
-        <Mat color={color} />
-      </mesh>
-    ) : (
-      <mesh position={[0, 0.06, -0.15]}>
-        <sphereGeometry args={[0.06, 20, 20]} />
-        <Mat color={color} />
-      </mesh>
-    );
-  }
-  switch (kind) {
-    case "rapado":
-      return cap(Math.PI * 0.36, 1.03);
-    case "rulos":
-      return (
-        <group>
-          {cap(Math.PI * 0.36, 1)}
-          {curls.map((p, i) => (
-            <mesh key={i} position={p}>
-              <sphereGeometry args={[0.045, 14, 14]} />
-              <Mat color={color} />
-            </mesh>
-          ))}
-        </group>
-      );
-    case "largo":
-      return (
-        <group>
-          {cap(Math.PI * 0.4, 1.02)}
-          <mesh position={[0, -0.12, -0.075]} scale={[1.05, 1, 0.55]}>
-            <capsuleGeometry args={[0.12, 0.14, 8, 16]} />
-            <Mat color={color} />
-          </mesh>
-          {[-1, 1].map((s) => (
-            <mesh key={s} position={[s * 0.12, -0.08, 0.02]} scale={[0.4, 1, 0.6]}>
-              <capsuleGeometry args={[0.05, 0.12, 6, 12]} />
-              <Mat color={color} />
-            </mesh>
-          ))}
-        </group>
-      );
-    case "ondas":
-      return (
-        <group>
-          {cap(Math.PI * 0.4, 1.03)}
-          {[-1, 1].map((s) =>
-            [0, 1, 2].map((k) => (
-              <mesh key={`${s}${k}`} position={[s * (R * 0.92 - k * 0.006), -0.02 - k * 0.055, -0.02 - k * 0.01]}>
-                <sphereGeometry args={[0.045 - k * 0.004, 16, 16]} />
-                <Mat color={color} />
-              </mesh>
-            )),
-          )}
-          <mesh position={[0, -0.06, -0.09]} scale={[1.05, 1, 0.55]}>
-            <capsuleGeometry args={[0.11, 0.08, 8, 16]} />
-            <Mat color={color} />
-          </mesh>
-        </group>
-      );
-    case "cresta":
-      return (
-        <group>
-          {cap(Math.PI * 0.36, 1.03)}
-          {/* Cresta: una fila de mechones de adelante hacia atrás */}
-          {[0, 1, 2, 3, 4, 5].map((k) => {
-            const a = -0.35 + k * 0.32; // ángulo sobre la cabeza, de la frente a la nuca
-            return (
-              <mesh
-                key={k}
-                position={[0, Math.cos(a) * R * 1.02 + 0.01, Math.sin(-a) * R * 1.02]}
-                rotation={[-a, 0, 0]}
-                scale={[0.6, 1, 1.4]}
-              >
-                <coneGeometry args={[0.04, 0.1, 14]} />
-                <Mat color={color} />
-              </mesh>
-            );
-          })}
-        </group>
-      );
-    case "recogido":
-      return (
-        <group>
-          {cap(Math.PI * 0.39, 1.02)}
-          <mesh position={[0, 0.13, -0.11]}>
-            <sphereGeometry args={[0.06, 20, 20]} />
-            <Mat color={color} />
-          </mesh>
-        </group>
-      );
-    default:
-      return (
-        <group>
-          {cap(Math.PI * 0.37, 1.05)}
-          {/* Jopo */}
-          <mesh position={[0.02, R * 0.78, R * 0.5]} rotation={[0.9, 0, -0.35]} scale={[1.5, 0.55, 0.9]}>
-            <sphereGeometry args={[0.055, 20, 16]} />
-            <Mat color={color} />
-          </mesh>
-        </group>
-      );
-  }
-}
-
-function torsoProfile(d: BodyDims, inflate = 0, from = 0.9, to = 1.49): [number, number][] {
-  const chest = Math.max(d.waist, d.shoulder * (d.feminine ? 0.95 : 0.85));
-  const pts: [number, number][] = [
-    [d.hip * 0.95, 0.9],
-    [d.hip, 0.98],
-    [d.waist, 1.1],
-    [chest, 1.28],
-    [d.shoulder * 0.92, 1.4],
-    [d.shoulder * 0.55, 1.46],
-    [0.06, 1.49],
-  ];
-  return pts.filter(([, y]) => y >= from - 1e-6 && y <= to + 1e-6).map(([r, y]) => [r + inflate, y]);
-}
-
-function Body({ d, skin, look, style }: { d: BodyDims; skin: string; look: Look; style: AvatarStyle }) {
+/** El avatar completo, con la ropa puesta. Respira despacito. */
+function Avatar({ dims, skin, look, style }: { dims: BodyDims; skin: string; look: Look; style: AvatarStyle }) {
+  // Si no elegiste nada, el avatar lleva una remera y un short básicos.
+  const worn = useMemo(() => ({ top: wornTop(look), bottom: wornBottom(look) }), [look]);
+  const top = useMeasuredTop(worn.top);
+  const bottom = useMeasuredBottom(worn.bottom);
+  // Los brazos se abren según el cuerpo y la ropa (un abrigo grueso, o una remera oversize, los separa más).
+  const room = armRoom(look, top);
+  const sk = useMemo(() => buildSkeleton(dims, { torso: room.torso, hips: room.hips }), [dims, room.torso, room.hips]);
   const breathe = useRef<THREE.Group>(null);
   useFrame(({ clock }) => {
-    if (breathe.current) breathe.current.scale.y = 1 + Math.sin(clock.elapsedTime * 1.6) * 0.004;
+    if (breathe.current) breathe.current.scale.y = 1 + Math.sin(clock.elapsedTime * 1.6) * 0.003;
   });
 
-  const sx = d.shoulder * 0.95;
-  const arm = (side: 1 | -1) => ({
-    shoulder: [side * sx, 1.4, 0] as V3,
-    elbow: [side * (sx + 0.05), 1.13, 0.01] as V3,
-    wrist: [side * (sx + 0.08), 0.88, 0.02] as V3,
-  });
-  const legX = d.hip * 0.56;
-  const leg = (side: 1 | -1) => ({
-    hip: [side * legX, 0.92, 0] as V3,
-    knee: [side * legX, 0.52, 0.01] as V3,
-    ankle: [side * legX * 0.96, 0.1, 0] as V3,
-  });
-  const thigh = 0.066 * Math.min(1.25, Math.max(0.85, d.hip / 0.17));
-  const calf = 0.055;
-
-  // Si no elegiste nada, el avatar lleva una remera y un short básicos grises.
-  const top = look.top ?? { color: "#d6d0c6", striped: false, sleeves: "short" as const, dress: "none" as const };
-  const bottom =
-    look.bottom ?? (look.top && look.top.dress !== "none" ? null : { color: "#8f8a82", striped: false, kind: "shorts" as const });
   const outer = look.outerwear;
-  const sleeveLen = outer ? "long" : top?.sleeves;
-  const skirtHem = top?.dress === "long" ? 0.14 : 0.55;
+  const acc = look.accessory;
+  // Prenda digital: el estampado de cada prenda como calcomanía (el color de la tela ya viene en el look).
+  // Si la IA no marcó el estampado, se mira la foto (suelto: calcomanía; por toda la tela: la tela real).
+  const topFront = useGarmentPrint(look.top?.print, false);
+  const topBack = useGarmentPrint(look.top?.print, true);
+  const bottomFront = useGarmentPrint(look.bottom?.print, false);
+  const bottomBack = useGarmentPrint(look.bottom?.print, true);
+  const outerFront = useGarmentPrint(outer?.print, false);
+  const outerBack = useGarmentPrint(outer?.print, true);
+  const topTile = topFront?.tile ?? topBack?.tile ?? null;
+  const shoes = look.shoes;
+  const heel = shoes?.kind === "heel";
+  const hatOn = acc?.kind === "cap" || acc?.kind === "beanie" || acc?.kind === "hat";
+  // Anteojos de sol elegidos como accesorio: los dibuja la cabeza, del color de la prenda.
+  const headStyle = useMemo(
+    () => (acc?.kind === "sunglasses" ? { ...style, glasses: "sol" as const, glassesColor: acc.color } : style),
+    [style, acc],
+  );
+
+  // Capas de ropa: cada prenda envuelve a las que van debajo (pantalón → remera → abrigo). Con
+  // cinturón, la remera va metida: ahí el pantalón la envuelve a ella.
+  const layers = useMemo(() => {
+    const legged = bottom && bottom.kind !== "skirt" && bottom.kind !== "brief";
+    // Lo ancho de las piernas (y lo que se corren hacia afuera, en un short ancho o un palazzo), para
+    // que lo de arriba (una remera, un tapado) las tape.
+    const reach = legged ? bottomLegReach(sk, bottom) : null;
+    const legs = legsEnvelope(sk, legged ? bottomInflate(bottom) : 0, 0.45, 0.99, reach?.thigh, reach?.calf);
+    let below = bottom ? bottomShell(sk, bottom) : null;
+    // Un pantalón muy suelto arriba (babucha, palazzo) también es más ancho de cadera: el cuerpo del
+    // pantalón envuelve el arranque de las piernas.
+    if (below && bottom && reach && bottom.kind === "pants" && reach.thigh(0) > 0.008) {
+      below = layerOver(below, [legsEnvelope(sk, bottomInflate(bottom), sk.crotchY - 0.03, 0.97, reach.thigh, reach.calf)], 0.002);
+    }
+    let topRings: Ring[];
+    if (top.tucked && below) {
+      topRings = topShell(sk, top, []);
+      below = layerOver(below, [topEnvelope(top, topRings)]);
+    } else {
+      topRings = topShell(sk, top, below ? [below, legs] : [legs]);
+    }
+    const dress = top.dress !== "none" ? skirtRings(sk.torso, 0.98, top.dress) : null;
+    // El cinturón (o la riñonera) va a la altura de la cintura del pantalón (según su tiro).
+    const wt = below ? below[below.length - 1].y : 1.02;
+    const waistGear =
+      below && acc?.kind === "belt"
+        ? bandAround(below, wt - 0.045, wt + 0.005, 0.012)
+        : below && acc?.kind === "waistbag"
+          ? bandAround(below, 0.975, 1.025, 0.012)
+          : null;
+    const outerRings = outer
+      ? outerShell(
+          sk,
+          outer,
+          [top.tucked ? topRings : topEnvelope(top, topRings), below, dress, legs, waistGear].filter((r): r is Ring[] => r !== null),
+        )
+      : null;
+    return { topRings, below, outerRings };
+  }, [sk, top, bottom, outer, acc]);
+
+  // Pantalón adentro de la bota (calza, chupín, jogging): la caña lo envuelve.
+  const bootAround = useMemo(() => {
+    if (!bottom || bottom.kind !== "pants" || pantsOverBoots(bottom)) return undefined;
+    const prof = limbProfiles(sk);
+    const inf = bottomInflate(bottom);
+    const reach = bottomLegReach(sk, bottom);
+    const calfT = pantCalfT(bottom);
+    return (t: number) => (t > calfT ? 0 : profileAt(prof.calf, t) + inf + reach.calf(t));
+  }, [sk, bottom]);
+
+  // Dónde se apoyan los accesorios: sobre lo de más afuera.
+  const accCtx = useMemo((): AccessoryContext => {
+    const prof = limbProfiles(sk);
+    // Solo el puño de la camisa llega a la muñeca (las otras mangas terminan antes).
+    const shirtCuff = top.sleeves === "long" && top.cuffs && (!outer || outer.kind === "vest" || outer.kind === "cape");
+    return {
+      sk,
+      outer: layers.outerRings ?? layers.topRings,
+      waist: layers.below,
+      wristCover: shirtCuff ? profileAt(prof.forearm, 0.88) + sleeveInflate(top) + 0.0055 : 0,
+    };
+  }, [sk, layers, top, outer]);
 
   return (
-    <group ref={breathe}>
-      <Head skin={skin} style={style} cap={look.accessory?.kind === "cap"} />
-      <mesh position={[0, 1.505, 0]}>
-        <cylinderGeometry args={[0.05, 0.058, 0.08, 20]} />
-        <Mat color={skin} />
-      </mesh>
-
-      {/* Cuerpo */}
-      <Lathe points={torsoProfile(d)}>
-        <Mat color={skin} rough={0.6} />
-      </Lathe>
-      {([-1, 1] as const).map((s) => {
-        const a = arm(s);
-        const l = leg(s);
-        return (
-          <group key={s}>
-            <Limb a={a.shoulder} b={a.elbow} r={0.045}>
-              <Mat color={skin} rough={0.6} />
-            </Limb>
-            <Limb a={a.elbow} b={a.wrist} r={0.037}>
-              <Mat color={skin} rough={0.6} />
-            </Limb>
-            <mesh position={[a.wrist[0] + s * 0.01, 0.83, 0.02]} scale={[0.8, 1.2, 0.6]}>
-              <sphereGeometry args={[0.045, 16, 16]} />
-              <Mat color={skin} rough={0.6} />
-            </mesh>
-            <Limb a={l.hip} b={l.knee} r={thigh}>
-              <Mat color={skin} rough={0.6} />
-            </Limb>
-            <Limb a={l.knee} b={l.ankle} r={calf}>
-              <Mat color={skin} rough={0.6} />
-            </Limb>
-            {/* Pies (o calzado) */}
-            <mesh position={[l.ankle[0], 0.045, 0.045]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 1, 0.8]} castShadow>
-              <capsuleGeometry args={[look.shoes ? 0.055 : 0.045, look.shoes ? 0.15 : 0.12, 6, 16]} />
-              <Mat color={look.shoes?.color ?? skin} />
-            </mesh>
-            {look.shoes?.boots && (
-              <mesh position={[l.ankle[0], 0.17, 0.005]} castShadow>
-                <cylinderGeometry args={[0.064, 0.06, 0.2, 18]} />
-                <Mat color={look.shoes.color} rough={0.5} />
-              </mesh>
-            )}
-
-            {/* Mangas */}
-            {(top || outer) && (
-              <>
-                <Limb a={a.shoulder} b={sleeveLen === "long" ? a.elbow : lerp3(a.shoulder, a.elbow, 0.55)} r={outer ? 0.062 : 0.054}>
-                  <Mat color={outer?.color ?? top!.color} striped={outer ? outer.striped : top!.striped} />
-                </Limb>
-                {sleeveLen === "long" && (
-                  <Limb a={a.elbow} b={lerp3(a.elbow, a.wrist, 0.92)} r={outer ? 0.052 : 0.045}>
-                    <Mat color={outer?.color ?? top!.color} striped={outer ? outer.striped : top!.striped} />
-                  </Limb>
+    <group position={[0, heel ? HEEL_LIFT : soleLift(shoes), 0]}>
+      <group ref={breathe}>
+        <BodySkin sk={sk} skin={skin} barefoot={!shoes} />
+        <Head skin={skin} style={headStyle} cap={hatOn} />
+        {bottom && layers.below && (
+          <BottomGarment
+            sk={sk}
+            look={bottom}
+            shell={layers.below}
+            covered={Boolean(outer) || (!top.tucked && ((top.cut === "normal" && top.dress === "none") || top.cut === "swimsuit"))}
+            decalFront={bottomFront?.decal ?? null}
+            decalBack={bottomBack?.decal ?? null}
+            tile={bottomFront?.tile ?? bottomBack?.tile ?? null}
+          />
+        )}
+        <TopGarment
+          sk={sk}
+          look={top}
+          shell={layers.topRings}
+          skin={skin}
+          showSleeves={!outer || outer.kind === "vest"}
+          decalFront={outer && outer.kind !== "vest" ? null : (topFront?.decal ?? null)}
+          decalBack={outer && outer.kind !== "vest" ? null : (topBack?.decal ?? null)}
+          tile={topTile}
+        />
+        {top.dress !== "none" && (
+          <Skirt sk={sk} from={0.98} length={top.dress} color={top.color} pattern={topTile ? { kind: "foto", tex: topTile } : top.pattern} />
+        )}
+        {outer && layers.outerRings && (
+          <OuterGarment
+            sk={sk}
+            look={outer}
+            shell={layers.outerRings}
+            decalFront={outerFront?.decal ?? null}
+            decalBack={outerBack?.decal ?? null}
+            tile={outerFront?.tile ?? outerBack?.tile ?? null}
+          />
+        )}
+        {acc && <Accessory look={acc} ctx={accCtx} />}
+        {shoes &&
+          ([1, -1] as const).map((side) => {
+            const ankle = sk.leg(1).ankle;
+            return (
+              <group key={side} scale={[side, 1, 1]}>
+                <group position={ankle} rotation={[heel ? HEEL_PITCH : 0, 0.1, 0]}>
+                  <Shoe look={shoes} skin={skin} />
+                </group>
+                {(shoes.kind === "boot" || shoes.kind === "tallboot") && (
+                  <BootShaft
+                    sk={sk}
+                    look={shoes}
+                    underHem={bottom && pantsOverBoots(bottom) ? pantCalfT(bottom) : undefined}
+                    around={bootAround}
+                  />
                 )}
-              </>
-            )}
-
-            {/* Piernas del pantalón */}
-            {bottom && bottom.kind !== "skirt" && (
-              <>
-                <Limb a={[l.hip[0], 0.96, 0]} b={bottom.kind === "shorts" ? lerp3(l.hip, l.knee, 0.8) : l.knee} r={thigh + 0.014}>
-                  <Mat color={bottom.color} striped={bottom.striped} />
-                </Limb>
-                {bottom.kind === "pants" && (
-                  <Limb a={l.knee} b={[l.ankle[0], 0.12, 0]} r={calf + 0.016}>
-                    <Mat color={bottom.color} striped={bottom.striped} />
-                  </Limb>
-                )}
-              </>
-            )}
-          </group>
-        );
-      })}
-
-      {/* Cadera del pantalón o pollera */}
-      {bottom && bottom.kind !== "skirt" && (
-        <Lathe points={torsoProfile(d, 0.014, 0.9, 1.1).concat([[d.waist + 0.014, 1.12]])}>
-          <Mat color={bottom.color} striped={bottom.striped} />
-        </Lathe>
-      )}
-      {bottom?.kind === "skirt" && (
-        <Lathe points={[[d.hip + 0.09, 0.55], [d.hip + 0.03, 0.9], [d.waist + 0.02, 1.08]]} flat={0.75}>
-          <Mat color={bottom.color} striped={bottom.striped} />
-        </Lathe>
-      )}
-
-      {/* Parte de arriba / vestido */}
-      {top && (
-        <Lathe points={torsoProfile(d, 0.012, top.dress === "none" ? 0.92 : 0.98, 1.47)}>
-          <Mat color={top.color} striped={top.striped} />
-        </Lathe>
-      )}
-      {top && top.dress !== "none" && (
-        <Lathe
-          points={[
-            [d.hip + (top.dress === "long" ? 0.14 : 0.08), skirtHem],
-            [d.hip + 0.03, 0.9],
-            [d.hip + 0.012, 0.98],
-          ]}
-          flat={0.75}
-        >
-          <Mat color={top.color} striped={top.striped} />
-        </Lathe>
-      )}
-
-      {/* Abrigo: una capa más grande y un poco más larga */}
-      {outer && (
-        <Lathe points={torsoProfile(d, 0.032, 0.9, 1.47).concat([[0.075, 1.5]]).map(([r, y], i) => (i === 0 ? [r + 0.01, 0.84] : [r, y]))}>
-          <Mat color={outer.color} striped={outer.striped} />
-        </Lathe>
-      )}
-
-      {/* Accesorios */}
-      {look.accessory?.kind === "cap" && (
-        <group position={[0, HEAD_Y + 0.03, 0]}>
-          <mesh scale={[1.03, 0.82, 1.03]}>
-            <sphereGeometry args={[HEAD_R * 1.04, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
-            <Mat color={look.accessory.color} />
-          </mesh>
-          <mesh position={[0, 0.0, HEAD_R * 0.95]} rotation={[0.18, 0, 0]}>
-            <cylinderGeometry args={[0.09, 0.09, 0.012, 24, 1, false, -Math.PI / 2, Math.PI]} />
-            <Mat color={look.accessory.color} />
-          </mesh>
-        </group>
-      )}
-      {look.accessory?.kind === "scarf" && (
-        <mesh position={[0, 1.49, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 0.8, 1]}>
-          <torusGeometry args={[0.07, 0.032, 12, 32]} />
-          <Mat color={look.accessory.color} />
-        </mesh>
-      )}
+              </group>
+            );
+          })}
+      </group>
     </group>
   );
-}
-
-function lerp3(a: V3, b: V3, t: number): V3 {
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 }
 
 /** Mueve la cámara suave hacia la vista elegida. */
 function CameraRig({ view, scale, controls }: { view: View; scale: number; controls: React.RefObject<OrbitControlsImpl | null> }) {
   const moving = useRef(true);
   const goal = useMemo(() => cameraFor(view, scale), [view, scale]);
+  const { camera, scene } = useThree();
+
+  // Solo en desarrollo: las pruebas automáticas mueven la cámara a cualquier zona (manos, pies…).
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    const w = window as unknown as {
+      __armarioCam?: (p: V3, t: V3, fov?: number) => void;
+      __armarioScene?: THREE.Scene;
+      __armarioPrint?: typeof analyzePhotoPrint;
+    };
+    w.__armarioScene = scene;
+    w.__armarioPrint = analyzePhotoPrint;
+    // fov chico = zoom (para mirar de cerca sin chocar con la distancia mínima de la cámara).
+    w.__armarioCam = (p, t, fov) => {
+      moving.current = false;
+      if (fov && camera instanceof THREE.PerspectiveCamera) {
+        camera.fov = fov;
+        camera.updateProjectionMatrix();
+      }
+      camera.position.set(...p);
+      controls.current?.target.set(...t);
+      controls.current?.update();
+    };
+    return () => {
+      delete w.__armarioCam;
+      delete w.__armarioScene;
+      delete w.__armarioPrint;
+    };
+  }, [camera, controls, scene]);
 
   useEffect(() => {
     moving.current = true;
@@ -625,7 +354,7 @@ export default function Avatar3D({
       <directionalLight position={[-3, 2, -2]} intensity={0.5} />
 
       <group scale={dims.scale}>
-        <Body d={dims} skin={skin} look={look} style={style} />
+        <Avatar dims={dims} skin={skin} look={look} style={style} />
       </group>
 
       {/* Piso: un círculo en el estudio, o la vereda en la vista de otra persona */}

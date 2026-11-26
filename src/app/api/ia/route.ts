@@ -6,6 +6,11 @@ import {
   CHOOSE_SCHEMA,
   GARMENT_PROMPT,
   GARMENT_SCHEMA,
+  GARMENT_SCHEMA_SIMPLE,
+  FIT_SCHEMA,
+  FIT_SCHEMA_BASIC,
+  fitPrompt,
+  parseFit,
   PROFILE_SCHEMA,
   profilePromptFor,
   choosePrompt,
@@ -16,7 +21,22 @@ import {
 } from "@/lib/ai-schema";
 
 const MAX_TOTAL_CHARS = 4_000_000; // Vercel acepta hasta 4.5 MB por pedido
-const MAX_PROFILE_PHOTOS = 5;
+const MAX_PROFILE_PHOTOS = 15;
+
+const SIDES = ["adelante", "atrás", "etiqueta"];
+
+/** Qué muestra cada foto de la prenda (solo valores conocidos). */
+function garmentSides(raw: unknown, n: number): string {
+  const list = Array.isArray(raw) ? raw.filter((x): x is string => SIDES.includes(x)) : [];
+  return (list.length === n ? list : SIDES.slice(0, n)).join(", ");
+}
+
+/** Para que la IA nombre la prenda como la usa esa persona (ej: "bombacha" o "calzoncillo"). */
+function garmentGenderHint(gender: unknown): string {
+  if (gender === "hombre") return "La ropa es de un hombre: elegí kind entre prendas de hombre o unisex.\n\n";
+  if (gender === "mujer") return "La ropa es de una mujer: elegí kind entre prendas de mujer o unisex.\n\n";
+  return "";
+}
 
 function fail(status: number, message: string) {
   return Response.json({ error: message }, { status });
@@ -34,7 +54,12 @@ async function userFromToken(token: string | null): Promise<string | null> {
 type Part = { text: string } | { inline_data: { mime_type: string; data: string } };
 
 /** Llama a Gemini probando modelos de respaldo si uno está saturado. Devuelve el JSON o un error listo para mandar. */
-async function askGemini(apiKey: string, parts: Part[], schema: object): Promise<{ data: unknown } | { error: Response }> {
+async function askGemini(
+  apiKey: string,
+  parts: Part[],
+  schema: object,
+  fallbackSchema?: object,
+): Promise<{ data: unknown } | { error: Response }> {
   const payload = JSON.stringify({
     contents: [{ parts }],
     generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.2 },
@@ -56,6 +81,8 @@ async function askGemini(apiKey: string, parts: Part[], schema: object): Promise
   if (res.status === 429) return { error: fail(429, "Se usó todo el cupo gratis de la IA por ahora. Probá en un rato.") };
   if (!res.ok) {
     console.error("Gemini error", res.status, (await res.text().catch(() => "")).slice(0, 500));
+    // Si el formato pedido es demasiado complejo para el modelo, se prueba con uno más simple.
+    if (res.status === 400 && fallbackSchema) return askGemini(apiKey, parts, fallbackSchema);
     return { error: fail(502, "La IA no respondió. Probá de nuevo.") };
   }
   const json = await res.json();
@@ -75,7 +102,16 @@ export async function POST(request: Request) {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? null;
   if (!(await userFromToken(token))) return fail(401, "Iniciá sesión para usar la IA.");
 
-  let body: { kind?: string; image?: string; images?: string[]; choose?: ChooseRequest; gender?: string };
+  let body: {
+    kind?: string;
+    image?: string;
+    images?: string[];
+    sides?: unknown;
+    choose?: ChooseRequest;
+    gender?: string;
+    category?: unknown;
+    garmentKind?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
@@ -98,9 +134,34 @@ export async function POST(request: Request) {
     return Response.json(choice);
   }
 
+  if (body.kind === "ajuste") {
+    const img = Array.isArray(body.images) ? body.images[0] : undefined;
+    const m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(typeof img === "string" ? img : "");
+    if (!m) return fail(400, "La foto no es válida.");
+    if (m[2].length > MAX_TOTAL_CHARS) return fail(413, "La foto es muy pesada.");
+    // Qué prenda dijo la persona que es (solo identificadores del catálogo), para buscar sus detalles.
+    const context = {
+      category: typeof body.category === "string" ? body.category : undefined,
+      kind: typeof body.garmentKind === "string" ? body.garmentKind : undefined,
+    };
+    const r = await askGemini(
+      apiKey,
+      [{ inline_data: { mime_type: m[1], data: m[2] } }, { text: fitPrompt(context) }],
+      FIT_SCHEMA,
+      FIT_SCHEMA_BASIC,
+    );
+    if ("error" in r) return r.error;
+    const fit = parseFit(r.data);
+    if (!fit) {
+      console.error("Ajuste no válido", JSON.stringify(r.data).slice(0, 300));
+      return fail(502, "La IA no pudo ubicar la prenda en la foto.");
+    }
+    return Response.json(fit);
+  }
+
   if (body.kind !== "prenda" && body.kind !== "perfil") return fail(400, "Tipo de análisis inválido.");
   const raw = Array.isArray(body.images) ? body.images : body.image ? [body.image] : [];
-  const max = body.kind === "perfil" ? MAX_PROFILE_PHOTOS : 1;
+  const max = body.kind === "perfil" ? MAX_PROFILE_PHOTOS : 3;
   if (raw.length === 0 || raw.length > max) return fail(400, `Mandá entre 1 y ${max} fotos.`);
   if (raw.reduce((n, x) => n + (typeof x === "string" ? x.length : 0), 0) > MAX_TOTAL_CHARS) {
     return fail(413, "Las fotos son muy pesadas. Probá con menos fotos.");
@@ -115,12 +176,20 @@ export async function POST(request: Request) {
   const isGarment = body.kind === "prenda";
   parts.push({
     text: isGarment
-      ? GARMENT_PROMPT
+      ? garmentGenderHint(body.gender) +
+        (parts.length > 1
+        ? `${GARMENT_PROMPT}\n\nTe paso ${parts.length} fotos de la MISMA prenda, en este orden: ${garmentSides(body.sides, parts.length)}. Si atrás tiene un estampado o logo grande, contalo como estampado. Si hay una foto de la etiqueta, leé el talle de ahí.`
+          : GARMENT_PROMPT)
       : parts.length > 1
         ? `${profilePromptFor(body.gender)}\n\nTe paso ${parts.length} fotos de la MISMA persona, con distintos ángulos y luces. Combiná lo que ves en todas para dar una sola respuesta. Si la luz de alguna cambia el color de la piel, confiá más en las que tienen luz natural.`
         : profilePromptFor(body.gender),
   });
-  const r = await askGemini(apiKey, parts, isGarment ? GARMENT_SCHEMA : PROFILE_SCHEMA);
+  const r = await askGemini(
+    apiKey,
+    parts,
+    isGarment ? GARMENT_SCHEMA : PROFILE_SCHEMA,
+    isGarment ? GARMENT_SCHEMA_SIMPLE : undefined,
+  );
   if ("error" in r) return r.error;
   const result = isGarment ? parseGarment(r.data) : parseProfile(r.data);
   if (!result) return fail(502, "La IA no entendió la foto. Probá con otra.");

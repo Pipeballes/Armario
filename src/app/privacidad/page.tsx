@@ -17,7 +17,7 @@ export default function PrivacidadPage() {
         ← Perfil
       </Link>
       <h1 className="page-title mb-1">Política de privacidad</h1>
-      <p className="mb-4 text-sm text-muted">Última actualización: 24 de noviembre de 2026 (fotos del perfil guardadas)</p>
+      <p className="mb-4 text-sm text-muted">Última actualización: 24 de noviembre de 2026 (recordatorio a la mañana)</p>
 
       <p>
         Armario es una app para ordenar tu ropa y armar outfits. Esta página explica, en palabras simples, qué datos
@@ -30,7 +30,7 @@ export default function PrivacidadPage() {
           <strong>Tu mail</strong>, si creás una cuenta, para mandarte el código de entrada.
         </li>
         <li>
-          <strong>Las fotos de tu ropa</strong> y sus datos (tipo, color, estilo, cuándo la usaste).
+          <strong>Las fotos de tu ropa</strong> (adelante, atrás y etiqueta) y sus datos (tipo, color, estilo, talle, cuándo la usaste).
         </li>
         <li>
           <strong>Tu perfil</strong>: nombre, género, subtono y tono de piel, silueta, altura, estilos, las fotos tuyas que
@@ -40,6 +40,11 @@ export default function PrivacidadPage() {
         <li>
           <strong>Los links de tus calendarios</strong>, si los conectás. Armario solo lee los eventos para sugerirte
           outfits: no los guarda ni los modifica.
+        </li>
+        <li>
+          <strong>El recordatorio a la mañana</strong>, si lo activás: la hora elegida, tu zona horaria, el código que
+          tu celular da para recibir notificaciones y el texto de los mensajes de los próximos 7 días (tu evento, el
+          clima y qué ponerte). Si lo desactivás, no se manda más.
         </li>
       </ul>
       <p className="mt-2">
@@ -76,6 +81,10 @@ export default function PrivacidadPage() {
         </li>
         <li>
           <strong>Gmail</strong>: se usa para mandar el mail con el código de entrada.
+        </li>
+        <li>
+          <strong>Apple, Google o Mozilla</strong>: el servicio de notificaciones de tu celular o navegador recibe el
+          texto del recordatorio para mostrártelo (va cifrado).
         </li>
         <li>
           <strong>iCloud, Google Calendar u Outlook</strong>: Armario lee los calendarios que conectes a través del link

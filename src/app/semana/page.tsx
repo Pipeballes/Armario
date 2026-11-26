@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { CATEGORIES, OCCASIONS, WEATHERS } from "@/lib/catalog";
+import { OCCASIONS, WEATHERS, categoryView } from "@/lib/catalog";
 import type { AgendaEvent } from "@/lib/agenda";
 import { fetchAgenda } from "@/lib/agenda-client";
 import { PROBAR_KEY, selectionFrom } from "@/lib/avatar";
@@ -196,7 +196,7 @@ export default function SemanaPage() {
                           <figure key={i.id}>
                             <GarmentPhoto garment={i} />
                             <figcaption className="mt-1 truncate text-[11px] text-muted">
-                              {CATEGORIES.find((c) => c.id === i.category)?.emoji} {i.name}
+                              {categoryView(i.category, profile.gender).emoji} {i.name}
                             </figcaption>
                           </figure>
                         ))}
