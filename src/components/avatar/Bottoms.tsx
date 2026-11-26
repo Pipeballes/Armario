@@ -193,7 +193,6 @@ function Hem({
 
 /** Pierna del pantalón (la derecha). Sigue la forma de la pierna + holgura; los anchos se abren abajo. */
 function PantLeg({ sk, look, fill }: { sk: Skeleton; look: BottomLook; fill: Fill }) {
-  const l = useMemo(() => sk.leg(1), [sk]);
   // El eje de la tela (en un short ancho o un palazzo, corrido hacia afuera).
   const axis = useMemo(() => bottomLegAxis(sk, look, 1), [sk, look]);
   const prof = useMemo(() => limbProfiles(sk), [sk]);
@@ -205,7 +204,7 @@ function PantLeg({ sk, look, fill }: { sk: Skeleton; look: BottomLook; fill: Fil
   const thigh = useMemo(() => pant?.thigh ?? bottomThighProfile(sk, look), [pant, sk, look]);
   const notch = legNotch(sk, look);
   const thighEnd = useMemo(() => lerp3(axis.hip, axis.knee, thighT), [axis, thighT]);
-  const calfEnd = useMemo(() => (pant ? lerp3(axis.knee, axis.ankle, calfT) : lerp3(l.knee, l.ankle, calfT)), [pant, axis, l, calfT]);
+  const calfEnd = useMemo(() => lerp3(axis.knee, axis.ankle, calfT), [axis, calfT]);
   // Con tajo, la pierna torneada llega hasta donde empieza el tajo y el resto es un tramo recortado.
   const upper = useMemo(() => {
     if (!notch) return axisLathe(axis.hip, thighEnd, thigh);
@@ -233,9 +232,21 @@ function PantLeg({ sk, look, fill }: { sk: Skeleton; look: BottomLook; fill: Fil
       return [t, r];
     });
   }, [calfT, pant, prof, inf, look.wide, look.cuffs, look.tight, look.kind, sk.legR.ankle, kneeExtra]);
-  const kneeAt = pant ? axis.knee : l.knee;
+  const kneeAt = axis.knee;
   const lower = useMemo(() => (lowerProfile ? axisLathe(kneeAt, calfEnd, lowerProfile) : null), [lowerProfile, kneeAt, calfEnd]);
   const lowerR = useCallback((t: number) => (lowerProfile ? profileAt(lowerProfile, t / calfT) : 0), [lowerProfile, calfT]);
+  // Adentro de la boca de la pierna: un forro oscuro (la sombra de adentro), así se ve que es una
+  // pierna abierta y no una pollera.
+  const lining = useMemo(() => {
+    const inset = (p: [number, number][]) => p.map(([k, r]): [number, number] => [k, Math.max(0.01, r - 0.0014)]);
+    if (lowerProfile && calfT > 0) {
+      const k0 = 0.65;
+      return axisLathe(lerp3(kneeAt, calfEnd, k0), calfEnd, inset(cutProfile(lowerProfile, k0, 1)));
+    }
+    const tTop = thighT - notch;
+    const k0 = 0.45;
+    return axisLathe(lerp3(axis.hip, axis.knee, tTop * k0), lerp3(axis.hip, axis.knee, tTop), inset(cutProfile(thigh, k0 * (tTop / thighT), tTop / thighT)));
+  }, [lowerProfile, calfT, kneeAt, calfEnd, thighT, notch, axis, thigh]);
   const j = useMemo(() => jointBalls(sk, inf), [sk, inf]);
   // Bolas de la cadera y la rodilla del tamaño de la tela (en un pantalón suelto, más grandes que la pierna).
   const hipR = Math.min(Math.max(j.hip.r, pant ? thigh[0][1] : 0), j.hip.r + 0.01);
@@ -261,6 +272,9 @@ function PantLeg({ sk, look, fill }: { sk: Skeleton; look: BottomLook; fill: Fil
       <Geo geo={upper}>
         <Mat color={look.color} pattern={fill} repeat={REPEAT.leg} double />
       </Geo>
+      <Geo geo={lining} cast={false}>
+        <Mat color={shade(look.color, -0.32)} inside />
+      </Geo>
       {notchGeo && (
         <Geo geo={notchGeo}>
           <Mat color={look.color} pattern={fill} repeat={REPEAT.leg} double />
@@ -268,7 +282,7 @@ function PantLeg({ sk, look, fill }: { sk: Skeleton; look: BottomLook; fill: Fil
       )}
       {lower && (
         <>
-          <mesh position={pant ? axis.knee : j.knee.at} castShadow>
+          <mesh position={axis.knee} castShadow>
             <sphereGeometry args={[kneeR, 24, 18]} />
             <Mat color={look.color} pattern={fill} repeat={REPEAT.ball} />
           </mesh>
@@ -280,10 +294,10 @@ function PantLeg({ sk, look, fill }: { sk: Skeleton; look: BottomLook; fill: Fil
       {/* Terminación del short (y de la bermuda, debajo de la rodilla) */}
       {calfT === 0 && <Hem a={axis.hip} b={axis.knee} t1={thighT} R={R} style={look.hem} look={look} end={end} />}
       {look.kind === "bermuda" && !look.cuffs && (
-        <Hem a={l.knee} b={l.ankle} t1={calfT} R={lowerR} style={look.hem === "tajo" ? "simple" : look.hem} look={look} />
+        <Hem a={axis.knee} b={axis.ankle} t1={calfT} R={lowerR} style={look.hem === "tajo" ? "simple" : look.hem} look={look} />
       )}
       {look.kind === "bermuda" && look.cuffs && lower && (
-        <Cuff from={l.knee} to={calfEnd} r={profileAt(prof.calf, calfT) + 0.009} tube={0.01} color={look.trim} />
+        <Cuff from={axis.knee} to={calfEnd} r={profileAt(prof.calf, calfT) + 0.009} tube={0.01} color={look.trim} />
       )}
       {/* Botamanga del pantalón: ruedo, puño elástico (jogging, babucha), doblada o deshilachada */}
       {pant && lower && (
@@ -379,6 +393,29 @@ function ElasticWaist({ shell, look, cords }: { shell: Ring[]; look: BottomLook;
             <Mat color="#cfcfcc" />
           </mesh>
         </group>
+      ))}
+    </>
+  );
+}
+
+/**
+ * Costura del tiro: adelante, desde donde termina la bragueta (o la cintura) hasta la
+ * entrepierna, y atrás por el medio. Junto con la "V" entre las piernas, es lo que hace que un
+ * short no se vea como una pollera.
+ */
+function CrotchSeams({ shell, look, crotchY }: { shell: Ring[]; look: BottomLook; crotchY: number }) {
+  const lines = useMemo(() => {
+    const wt = shell[shell.length - 1].y;
+    const frontTop = look.fly ? wt - 0.115 : wt - 0.055;
+    const seam = (phi: number, top: number) =>
+      Array.from({ length: 8 }, (_, i) => shellPoint(shell, top + (crotchY + 0.004 - top) * (i / 7), phi, 0.0017));
+    return [seam(0, frontTop), seam(Math.PI, wt - 0.045)];
+  }, [shell, look.fly, crotchY]);
+  const color = look.pockets === "jean" ? look.trim : shade(look.color, -0.1);
+  return (
+    <>
+      {lines.map((pts, i) => (
+        <Line key={i} points={pts} r={0.0009} color={color} />
       ))}
     </>
   );
@@ -577,10 +614,9 @@ function LegDetails({ sk, look }: { sk: Skeleton; look: BottomLook }) {
     const calfR = (t: number) => profileAt(calfProfile, t / calfT) + 0.0016;
     const notch = legNotch(sk, look);
     for (const s of [1, -1] as const) {
-      const l = sk.leg(s);
       const ax = bottomLegAxis(sk, look, s);
       const fThigh = limbFrame(ax.hip, ax.knee);
-      const fCalf = pant ? limbFrame(ax.knee, ax.ankle) : limbFrame(l.knee, l.ankle);
+      const fCalf = limbFrame(ax.knee, ax.ankle);
       const out90 = s * (Math.PI / 2);
       if (look.sideStripes) {
         const w = 0.016;
@@ -601,6 +637,19 @@ function LegDetails({ sk, look }: { sk: Skeleton; look: BottomLook }) {
           }
         }
         lines.push({ pts, color: seam, r: 0.0007 });
+        // Costura de adentro (la entrepierna), del tiro al ruedo: marca que son dos piernas.
+        const in90 = -out90;
+        const inner = Array.from({ length: 9 }, (_, i) => {
+          const t = 0.02 + ((tEnd * 0.98 - 0.02) * i) / 8;
+          return limbPoint(fThigh, t, in90, thighR(t) - 0.0004);
+        });
+        if (calfT > 0) {
+          for (let i = 1; i <= 8; i++) {
+            const t = (calfT * 0.97 * i) / 8;
+            inner.push(limbPoint(fCalf, t, in90, calfR(t) - 0.0004));
+          }
+        }
+        lines.push({ pts: inner, color: look.pockets === "jean" ? look.trim : shade(look.color, -0.09), r: 0.0008 });
       }
       if (look.pockets === "cargo" && tEnd >= 0.35) {
         // Bolsillo cargo al costado del muslo, siempre dentro del largo de la prenda (en un short
@@ -642,6 +691,24 @@ function LegDetails({ sk, look }: { sk: Skeleton; look: BottomLook }) {
         const pts = [0.06, 0.3, 0.6, 0.98].map((t) => limbPoint(fThigh, t, 0, thighR(t) + 0.0004));
         if (calfT > 0) for (const u of [0.15, 0.5, 0.92]) pts.push(limbPoint(fCalf, u * calfT, 0, calfR(u * calfT) + 0.0004));
         lines.push({ pts, color: shade(look.color, 0.06), r: 0.0009 });
+      }
+    }
+    // Pliegue entre las piernas: donde las dos piernas se juntan (adelante y atrás), desde la
+    // entrepierna hasta donde se separan. Marca la "V" de un short o un pantalón.
+    if (!look.tight) {
+      const ax = bottomLegAxis(sk, look, 1);
+      const t0 = Math.max(0.02, (ax.hip[1] - sk.crotchY) / (ax.hip[1] - ax.knee[1]));
+      for (const side of [1, -1]) {
+        const pts: THREE.Vector3[] = [];
+        for (let i = 0; i <= 12; i++) {
+          const t = t0 + ((tEnd * 0.97 - t0) * i) / 12;
+          const p = lerp3(ax.hip, ax.knee, t);
+          const r = profileAt(thigh, t / tEnd);
+          if (Math.abs(p[0]) >= r - 0.002) break;
+          const dz = Math.sqrt(r * r - p[0] * p[0]);
+          pts.push(new THREE.Vector3(0, p[1], p[2] + side * (dz + 0.0012)));
+        }
+        if (pts.length >= 3) lines.push({ pts, color: shade(look.color, -0.16), r: 0.002 });
       }
     }
     return { out, lines, buttons };
@@ -754,6 +821,7 @@ export function BottomGarment({
       {!covered && look.pockets !== "none" && <FrontPockets shell={shell} look={look} />}
       {!brief && (look.pockets === "jean" || look.pockets === "slant" || look.pockets === "cargo") && <BackPockets shell={shell} look={look} />}
       {!brief && <LegDetails sk={sk} look={look} />}
+      {!brief && !look.tight && <CrotchSeams shell={shell} look={look} crotchY={sk.crotchY} />}
       {prints}
       {!brief &&
         ([1, -1] as const).map((side) => (

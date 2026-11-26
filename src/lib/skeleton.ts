@@ -275,15 +275,20 @@ export function bottomLegExtra(sk: Skeleton, look: BottomLook): (t: number) => n
   return (t) => (t <= 0 ? 0 : w * Math.min(1, t / tEnd) ** 1.3);
 }
 
+/** Lo que queda la tela del short separada de la cara de adentro del muslo, en la boca de la pierna. */
+const SHORT_INNER_GAP = 0.003;
+
 /**
- * Un short ancho no se abre parejo para los dos lados: la tela se va hacia afuera (entre las
- * piernas no hay lugar). Por eso el eje de la pierna del short se corre un poco hacia afuera a
- * medida que baja. Devuelve cuánto se corre en cada punto (t: 0 en la cadera, 1 en la rodilla).
+ * La pierna de un short no es un tubo parejo alrededor del muslo: por dentro va casi pegada (entre
+ * las piernas no hay lugar) y toda la holgura se va hacia afuera. Así se ve la "V" entre las dos
+ * piernas y no parece una pollera. Por eso el eje de la pierna se corre hacia afuera a medida que
+ * baja. Devuelve cuánto se corre en cada punto (t: 0 en la cadera, 1 en la rodilla).
  */
 export function bottomLegShift(sk: Skeleton, look: BottomLook): (t: number) => number {
-  if (look.kind !== "shorts" || look.tight) return () => 0;
+  if ((look.kind !== "shorts" && look.kind !== "bermuda") || look.tight) return () => 0;
   const tEnd = bottomLegT(look);
-  const s = (0.85 * bottomLegExtra(sk, look)(tEnd)) / tEnd;
+  const slack = bottomInflate(look) + bottomLegExtra(sk, look)(tEnd) - SHORT_INNER_GAP;
+  const s = Math.max(0, slack) / tEnd;
   return (t) => s * Math.max(0, t);
 }
 
@@ -299,7 +304,11 @@ export function bottomLegAxis(sk: Skeleton, look: BottomLook, side: 1 | -1): { h
     const p = pantLeg(sk, look);
     ks = p.kneeShift;
     as = p.ankleShift;
-  } else ks = bottomLegShift(sk, look)(1);
+  } else {
+    // El short (y la bermuda, que sigue derecho debajo de la rodilla) se corre hacia afuera.
+    ks = bottomLegShift(sk, look)(1);
+    as = look.kind === "bermuda" ? ks : 0;
+  }
   return { hip: l.hip, knee: [l.knee[0] + side * ks, l.knee[1], l.knee[2]], ankle: [l.ankle[0] + side * as, l.ankle[1], l.ankle[2]] };
 }
 
@@ -620,7 +629,10 @@ export function bottomLegReach(sk: Skeleton, look: BottomLook): { thigh: (t: num
   }
   const extra = bottomLegExtra(sk, look);
   const shift = bottomLegShift(sk, look);
-  return { thigh: (t) => extra(t) + shift(t), calf: () => 0 };
+  const tEnd = bottomLegT(look);
+  // La bermuda sigue debajo de la rodilla con el mismo ancho y corrida igual.
+  const calf = look.kind === "bermuda" ? extra(1) + shift(1) + 0.008 : 0;
+  return { thigh: (t) => (t <= tEnd ? extra(t) + shift(t) : 0), calf: (t) => (t <= 0.1 ? calf : 0) };
 }
 
 /** Si la parte de arriba se ensancha en los hombros (las que tienen mangas los tapan). */

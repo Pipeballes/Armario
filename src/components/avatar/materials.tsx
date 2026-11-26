@@ -172,6 +172,7 @@ export function Mat({
   repeat = REPEAT.body,
   double = false,
   detail = false,
+  inside = false,
 }: {
   color: string;
   pattern?: Fill;
@@ -179,6 +180,8 @@ export function Mat({
   double?: boolean;
   /** Pegado sobre otra superficie (bolsillo, tira, franja): se dibuja delante, sin parpadeo. */
   detail?: boolean;
+  /** Solo la cara de adentro (el forro oscuro que se ve por la boca de una pierna o una manga). */
+  inside?: boolean;
 }) {
   const map = usePatternTexture(color, pattern, repeat);
   return (
@@ -189,7 +192,7 @@ export function Mat({
       color={map ? "#ffffff" : color}
       map={map ?? undefined}
       gradientMap={getToonGradient()}
-      side={double || detail ? THREE.DoubleSide : THREE.FrontSide}
+      side={inside ? THREE.BackSide : double || detail ? THREE.DoubleSide : THREE.FrontSide}
       polygonOffset={detail}
       polygonOffsetFactor={detail ? -1 : 0}
       polygonOffsetUnits={detail ? -1 : 0}
